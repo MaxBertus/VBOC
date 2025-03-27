@@ -14,7 +14,6 @@ from vboc.abstract import AdamModel
 from vboc.controller import ViabilityController
 from vboc.learning import NeuralNetwork, RegressionNN, plot_brs
 
-
 def computeDataOnBorder(q, N_guess):
     controller.resetHorizon(N_guess)
 
@@ -36,7 +35,6 @@ def computeDataOnBorder(q, N_guess):
     else:
         return x_star[0], x_star, u_star, status
     
-
 def fixedVelocityDir(N_guess, n_pts=100):
     """ Compute data on section of the viability kernel"""
     sec_pts = []
@@ -79,7 +77,6 @@ def fixedVelocityDir(N_guess, n_pts=100):
         status_list.append(status_vec)
     return sec_pts, status_list
 
-
 class Sine(torch.nn.Module):
     def __init__(self, alpha=1.):
         super().__init__()
@@ -100,7 +97,6 @@ class OverMSELoss(torch.nn.Module):
         l2_over = torch.mean(torch.relu(y_pred - y_true) ** 2) 
         return self.alpha * l2 + self.beta * l2_over
     
-
 class RAELoss(torch.nn.Module):
     """ Relative Absolute Error loss """
     def __init__(self):
@@ -111,7 +107,6 @@ class RAELoss(torch.nn.Module):
         den = torch.sum(torch.abs(y_true - torch.mean(y_true)))
         return num / den
     
-
 class CustomLoss(torch.nn.Module):
     """ Custom loss function (MSE + RE on overestimates) """
     def __init__(self, alpha=1., beta=0.6):
@@ -124,38 +119,37 @@ class CustomLoss(torch.nn.Module):
         l1_over = torch.mean(torch.relu(y_pred - y_true))
         return self.alpha * l2 + self.beta * l1_over 
 
-
 if __name__ == '__main__':
     
     start_time = time.time()
 
     # Define the obstacles
-    ee_radius = 0.075
-    obs = dict()
-    obs['name'] = 'floor'
-    obs['type'] = 'box'
-    obs['dimensions'] = [2, 2, 1e-3]
-    obs['color'] = [0, 0, 1, 1]
-    obs['position'] = np.array([0., 0., 0.])
-    obs['transform'] = np.eye(4)
-    obs['bounds'] = np.array([ee_radius, 1e6])      # lb , ub
-    obstacles = [obs]
+    # ee_radius = 0.075
+    # obs = dict()
+    # obs['name'] = 'floor'
+    # obs['type'] = 'box'
+    # obs['dimensions'] = [2, 2, 1e-3]
+    # obs['color'] = [0, 0, 1, 1]
+    # obs['position'] = np.array([0., 0., 0.])
+    # obs['transform'] = np.eye(4)
+    # obs['bounds'] = np.array([ee_radius, 1e6])      # lb , ub
+    # obstacles = [obs]
 
-    obs = dict()
-    obs['name'] = 'ball'
-    obs['type'] = 'sphere'
-    obs['radius'] = 0.12
-    obs['color'] = [0, 1, 1, 1]
-    obs['position'] = np.array([0.6, 0., 0.12])
-    T_ball = np.eye(4)
-    T_ball[:3, 3] = obs['position']
-    obs['transform'] = T_ball
-    obs['bounds'] = np.array([(ee_radius + obs['radius']) ** 2, 1e6])     
-    obstacles.append(obs)
+    # obs = dict()
+    # obs['name'] = 'ball'
+    # obs['type'] = 'sphere'
+    # obs['radius'] = 0.12
+    # obs['color'] = [0, 1, 1, 1]
+    # obs['position'] = np.array([0.6, 0., 0.12])
+    # T_ball = np.eye(4)
+    # T_ball[:3, 3] = obs['position']
+    # obs['transform'] = T_ball
+    # obs['bounds'] = np.array([(ee_radius + obs['radius']) ** 2, 1e6])     
+    # obstacles.append(obs)
 
     args = parse_args()
     # Define the available systems
-    available_systems = ['pendulum', 'double_pendulum', 'triple_pendulum', 'ur5', 'z1', 'dsr']
+    available_systems = ['sth', 'ddr']
     try:
         if args['system'] not in available_systems:
             raise NameError
