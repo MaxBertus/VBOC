@@ -26,3 +26,16 @@ hidden_size: 256         # number of hidden units in the neural network
 hidden_layers: 2          # number of hidden layers in the neural network
 
 obs_flag: true            # activation of Cartesian constraints
+
+mass: 3.5     # platform mass [kg]
+J:            # platform inertia [kg*m^2]
+- [0.155, 0.0, 0.0]
+- [0.0, 0.147, 0.0]
+- [0.0, 0.0, 0.251]
+
+l: 0.385      # length of the arm [m]
+cf: 1.5e-3    # thrust coefficient [N/(Hz)^2]
+ct: 4.590e-5  # torque coefficient [Nm/(Hz)^2]
+max_w: 108    # max spinning rate [Hz]
+alpha: 20     # Tilt cant angle
+ diag([0.155, 0.147, 0.251]);

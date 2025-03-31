@@ -6,43 +6,32 @@ import adam
 from adam.casadi import KinDynComputations
 from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 
-
-class AdamModel:
-    def __init__(self, params, n_dofs=False):
+class Model:
+    def __init__(self, params):
         self.params = params
-        robot = URDF.from_xml_file(params.robot_urdf)
-        try:
-            n_dofs = n_dofs if n_dofs else len(robot.joints)
-            if n_dofs > len(robot.joints) or n_dofs < 1:
-                raise ValueError
-        except ValueError:
-            print(f'\nInvalid number of degrees of freedom! Must be > 1 and <= {len(robot.joints)}\n')
-            exit()
-        robot_joints = robot.joints[1:n_dofs + 1] if params.urdf_name == 'z1' else robot.joints[:n_dofs]
-        joint_names = [joint.name for joint in robot_joints]
-        kin_dyn = KinDynComputations(params.robot_urdf, joint_names, robot.get_root())
-        kin_dyn.set_frame_velocity_representation(adam.Representations.BODY_FIXED_REPRESENTATION)
-        self.H_b = np.eye(4)                                            # Base roto-translation matrix
-        self.mass = kin_dyn.mass_matrix_fun()                           # Mass matrix
-        self.bias = kin_dyn.bias_force_fun()                            # Nonlinear effects 
-        self.fk = kin_dyn.forward_kinematics_fun(params.frame_name)     # Forward kinematics
-        nq = len(joint_names)
+        
+        # System parameters
+        self.mass = params.mass
+        self.J = params.J
+        self.l = params.l 
+        self.cf = params.cf
+        self.ct = params.ct
+        self.r = self.cf / self.cf * self.l
+        self.u_bar = params.u_bar
+        self.alpha = params.alpha
+
+        nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 
+        nu = 6 # dimension of input: 6 squared spinning rates
 
         self.amodel = AcadosModel()
-        self.amodel.name = params.urdf_name
+        self.amodel.name = params.robot_name
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
-        self.u = MX.sym("u", nq)
+        self.u = MX.sym("u", nu)
         self.p = MX.sym("p", nq)
-        # Double-integrator 
-        self.f_disc = vertcat(
-            self.x[:nq] + params.dt * self.x[nq:] + 0.5 * params.dt**2 * self.u,
-            self.x[nq:] + params.dt * self.u
-        ) 
             
         self.amodel.x = self.x
         self.amodel.u = self.u
-        self.amodel.disc_dyn_expr = self.f_disc
         self.amodel.p = self.p
 
         self.nx = self.amodel.x.size()[0]
@@ -51,47 +40,50 @@ class AdamModel:
         self.nq = nq
         self.nv = nq
 
-        # Real dynamics
-        self.tau = self.mass(self.H_b, self.x[:nq])[6:, 6:] @ self.u + \
-                   self.bias(self.H_b, self.x[:nq], np.zeros(6), self.x[nq:])[6:] 
+        # Rotation matrix 
+        euler_angles = self.x[3:6] 
+        roll, pitch, yaw = euler_angles[0], euler_angles[1], euler_angles[2]
+
+        R_x = MX([[1, 0, 0],
+                [0, np.cos(roll), -np.sin(roll)],
+                [0, np.sin(roll), np.cos(roll)]])
+
+        R_y = MX([[np.cos(pitch), 0, np.sin(pitch)],
+                [0, 1, 0],
+                [-np.sin(pitch), 0, np.cos(pitch)]])
+
+        R_z = MX([[np.cos(yaw), -np.sin(yaw), 0],
+                [np.sin(yaw), np.cos(yaw), 0],
+                [0, 0, 1]])
+
+        R_tot = R_z @ R_y @ R_x
+
+        self.Rrpy = Function('R', [self.x], [R_tot])
+
+        # F and M matrices
+        sin_a = np.sin(self.alpha)
+        cos_a = np.cos(self.alpha)
+
+        self.F = self.cf * np.array([
+        [0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a, 0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a],
+        [sin_a, -1/2 * sin_a, -1/2 * sin_a, sin_a, -1/2 * sin_a, -1/2 * sin_a],
+        [cos_a, cos_a, cos_a, cos_a, cos_a, cos_a]
+        ])
+
+        self.M = self.ct * np.array([
+            [0, np.sqrt(3)/2 * self.r * cos_a - np.sqrt(3)/2 * sin_a, np.sqrt(3)/2 * self.r * cos_a - np.sqrt(3)/2 * sin_a, 0, -np.sqrt(3)/2 * self.r * cos_a + np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * self.r * cos_a + np.sqrt(3)/2 * sin_a],
+            [-self.r * cos_a + sin_a, -1/2 * self.r * cos_a + 1/2 * sin_a, 1/2 * self.r * cos_a - 1/2 * sin_a, self.r * cos_a - sin_a, 1/2 * self.r * cos_a - 1/2 * sin_a, -1/2 * self.r * cos_a + 1/2 * sin_a],
+            [self.r * sin_a + cos_a, -self.r * sin_a - cos_a, self.r * sin_a + cos_a, -self.r * sin_a - cos_a, self.r * sin_a + cos_a, -self.r * sin_a - cos_a]
+        ])
+
+        # Control force and torque
+        self.fc = Function('fc', [self.x, self.u], [self.R(self.x) @ self.F @ self.u])
+        self.tc = Function('tc', [self.u], [self.M @ self.u])
         
-        # EE position (global frame)
-        T_ee = self.fk(np.eye(4), self.x[:nq])
-        self.t_loc = np.array([0.035, 0., 0.])
-        self.t_glob = T_ee[:3, 3] + T_ee[:3, :3] @ self.t_loc
-        self.ee_fun = Function('ee_fun', [self.x], [self.t_glob])
-
-        # Joint limits
-        joint_lower = np.array([joint.limit.lower for joint in robot_joints])
-        joint_upper = np.array([joint.limit.upper for joint in robot_joints])
-        joint_velocity = np.array([joint.limit.velocity for joint in robot_joints])
-        if params.urdf_name == 'z1':
-            joint_effort = np.array([2., 23., 10., 4.])
-        else:
-            joint_effort = np.array([joint.limit.effort for joint in robot_joints]) 
-
-
-        self.tau_min = - joint_effort
-        self.tau_max = joint_effort
-        self.x_min = np.hstack([joint_lower, - joint_velocity])
-        self.x_max = np.hstack([joint_upper, joint_velocity])
         self.eps = params.state_tol
-    
-    def jointToEE(self, x):
-        return np.array(self.ee_fun(x))
-
-    # def checkPositionBounds(self, q):
-    #     return np.logical_or(np.any(q < self.x_min[:self.nq] + self.eps), np.any(q > self.x_max[:self.nq] - self.eps))
-
-    # def checkVelocityBounds(self, v):
-    #     return np.logical_or(np.any(v < self.x_min[self.nq:] + self.eps), np.any(v > self.x_max[self.nq:] - self.eps))
-
-    # def checkStateBounds(self, x):
-    #     return np.logical_or(np.any(x < self.x_min + self.eps), np.any(x > self.x_max - self.eps))
-
 
 class AbstractController:
-    def __init__(self, model, obstacles=None):
+    def __init__(self, model):
         self.ocp_name = "".join(re.findall('[A-Z][^A-Z]*', self.__class__.__name__)[:-1]).lower()
         self.params = model.params
         self.model = model
@@ -136,35 +128,6 @@ class AbstractController:
         self.nl_con.append(self.model.tau)
         self.nl_lb.append(self.model.tau_min)
         self.nl_ub.append(self.model.tau_max)
-
-        # --> collision (both on running and terminal nodes)
-        if obstacles is not None and self.params.obs_flag:
-            # Collision avoidance with two obstacles
-            t_glob = self.model.t_glob
-            for obs in self.obstacles:
-                if obs['name'] == 'floor':
-                    self.nl_con_0.append(t_glob[2])
-                    self.nl_con.append(t_glob[2])
-                    self.nl_con_e.append(t_glob[2])
-
-                    self.nl_lb_0.append(obs['bounds'][0])
-                    self.nl_ub_0.append(obs['bounds'][1])
-                    self.nl_lb.append(obs['bounds'][0])
-                    self.nl_ub.append(obs['bounds'][1])
-                    self.nl_lb_e.append(obs['bounds'][0])
-                    self.nl_ub_e.append(obs['bounds'][1])
-                elif obs['name'] == 'ball':
-                    dist_b = (t_glob - obs['position']).T @ (t_glob - obs['position'])
-                    self.nl_con_0.append(dist_b)
-                    self.nl_con.append(dist_b)
-                    self.nl_con_e.append(dist_b)
-
-                    self.nl_lb_0.append(obs['bounds'][0])
-                    self.nl_ub_0.append(obs['bounds'][1])
-                    self.nl_lb.append(obs['bounds'][0])
-                    self.nl_ub.append(obs['bounds'][1])
-                    self.nl_lb_e.append(obs['bounds'][0])
-                    self.nl_ub_e.append(obs['bounds'][1])
 
         # Additional constraints
         self.addConstraint()

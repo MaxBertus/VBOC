@@ -123,30 +123,7 @@ if __name__ == '__main__':
     
     start_time = time.time()
 
-    # Define the obstacles
-    # ee_radius = 0.075
-    # obs = dict()
-    # obs['name'] = 'floor'
-    # obs['type'] = 'box'
-    # obs['dimensions'] = [2, 2, 1e-3]
-    # obs['color'] = [0, 0, 1, 1]
-    # obs['position'] = np.array([0., 0., 0.])
-    # obs['transform'] = np.eye(4)
-    # obs['bounds'] = np.array([ee_radius, 1e6])      # lb , ub
-    # obstacles = [obs]
-
-    # obs = dict()
-    # obs['name'] = 'ball'
-    # obs['type'] = 'sphere'
-    # obs['radius'] = 0.12
-    # obs['color'] = [0, 1, 1, 1]
-    # obs['position'] = np.array([0.6, 0., 0.12])
-    # T_ball = np.eye(4)
-    # T_ball[:3, 3] = obs['position']
-    # obs['transform'] = T_ball
-    # obs['bounds'] = np.array([(ee_radius + obs['radius']) ** 2, 1e6])     
-    # obstacles.append(obs)
-
+    ### PARSE ARGUMENTS OF COMMAND LINE 
     args = parse_args()
     # Define the available systems
     available_systems = ['sth', 'ddr']
@@ -160,26 +137,11 @@ if __name__ == '__main__':
     params.build = args['build']
     act = args['activation']
 
-    # Load the model of the robot
-    robot = URDF.from_xml_file(params.robot_urdf)
-    
-    try:
-        n_dofs = args['dofs'] if args['dofs'] else len(robot.joints)
-        if n_dofs > len(robot.joints) or n_dofs < 1:
-            raise ValueError
-    except ValueError:
-        print(f'\nInvalid number of degrees of freedom! Must be >= 1 and <= {len(robot.joints)}\n')
-        exit()
-
-    robot_joints = robot.joints[1:n_dofs+1] if params.urdf_name == 'z1' else robot.joints[:n_dofs]
-    joint_names = [joint.name for joint in robot_joints]
-    kin_dyn = KinDynComputations(params.robot_urdf, joint_names, robot.get_root())
-    kin_dyn.set_frame_velocity_representation(adam.Representations.BODY_FIXED_REPRESENTATION)
-
+    ### DEFINE
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = AdamModel(params, n_dofs)
+    model = Model(params, n_dofs)
     controller = ViabilityController(model, obstacles)
-    nq = model.nq
+    # nq = model.nq
 
     # Check if data and nn folders exist, if not create it
     if not os.path.exists(params.DATA_DIR):

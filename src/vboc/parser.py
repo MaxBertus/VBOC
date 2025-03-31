@@ -6,10 +6,8 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--system', type=str, default='z1',
-                        help='Systems to test. Available: pendulum, double_pendulum, triple_pendulum, ur5, z1')
-    parser.add_argument('-d', '--dofs', type=int, default=False, nargs='?',
-                        help='Number of desired degrees of freedom of the system')
+    parser.add_argument('-s', '--system', type=str, default='sth',
+                        help='Systems to test. Available: sth (Star-shaped Tilted Hexarotor), ddr (Differential Drive Robot - maybe in future)')
     parser.add_argument('-b', '--build', action='store_true',
                         help='Build the code of the embedded controller')
     parser.add_argument('-v', '--vboc', action='store_true',
@@ -28,21 +26,14 @@ def parse_args():
 
 
 class Parameters:
-    def __init__(self, urdf_name):
-        self.urdf_name = urdf_name
-        # Define all the useful paths
+    def __init__(self, robot_name):
+        self.robot_name = robot_name       
         self.PKG_DIR = os.path.dirname(os.path.abspath(__file__))
         self.ROOT_DIR = os.path.join(self.PKG_DIR, '../..')
         self.CONF_DIR = os.path.join(self.ROOT_DIR, 'config/')
         self.DATA_DIR = os.path.join(self.ROOT_DIR, 'data/')
         self.GEN_DIR = os.path.join(self.ROOT_DIR, 'generated/')
-        self.NN_DIR = os.path.join(self.ROOT_DIR, 'nn_models/' + urdf_name + '/')
-        self.ROBOTS_DIR = os.path.join(self.ROOT_DIR, 'robots/')
-        # temp solution
-        if urdf_name == 'ur5':
-            self.robot_urdf = f'{self.ROBOTS_DIR}/ur_description/urdf/{urdf_name}_robot.urdf'
-        else:
-            self.robot_urdf = f'{self.ROBOTS_DIR}/{urdf_name}_description/urdf/{urdf_name}.urdf'
+        self.NN_DIR = os.path.join(self.ROOT_DIR, 'nn_models/' + robot_name + '/')
 
         parameters = yaml.load(open(self.ROOT_DIR + '/config.yaml'), Loader=yaml.FullLoader)
 
@@ -75,14 +66,11 @@ class Parameters:
         self.hidden_size = int(parameters['hidden_size'])
         self.hidden_layers = int(parameters['hidden_layers'])
 
-        # For cartesian constraint
-        self.obs_flag = bool(parameters['obs_flag'])
-        if urdf_name == 'double_pendulum':
-            frame_name = 'link2' 
-        elif urdf_name == 'triple_pendulum':
-            frame_name = 'link3'
-        elif urdf_name == 'z1':
-            frame_name = 'gripperMover'
-        else:
-            frame_name = 'none'
-        self.frame_name = frame_name       #  TODO: dependence on the robot
+        self.mass = float(parameters['mass'])
+        self.J = np.array(parameters['J'])
+        self.l = float(parameters['l'])
+        self.cf = float(parameters['cf'])
+        self.ct = float(parameters['ct'])
+        self.u_bar = float(parameters['max_w'])**2
+        self.aplha = np.radians(float(parameters['alpha']))
+
