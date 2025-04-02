@@ -1,6 +1,6 @@
 import re
 import numpy as np
-from casadi import MX, vertcat, dot, Function
+from casadi import MX, DM, horzcat, vertcat, dot, Function, sin, cos, tan, cross
 from urdf_parser_py.urdf import URDF
 import adam
 from adam.casadi import KinDynComputations
@@ -17,48 +17,41 @@ class Model:
         self.cf = params.cf
         self.ct = params.ct
         self.r = self.cf / self.cf * self.l
+        self.g = 9.81
         self.u_bar = params.u_bar
         self.alpha = params.alpha
+        self.eps = params.state_tol
 
         nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 
         nu = 6 # dimension of input: 6 squared spinning rates
 
-        self.amodel = AcadosModel()
-        self.amodel.name = params.robot_name
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
         self.u = MX.sym("u", nu)
         self.p = MX.sym("p", nq)
             
-        self.amodel.x = self.x
-        self.amodel.u = self.u
-        self.amodel.p = self.p
-
-        self.nx = self.amodel.x.size()[0]
-        self.nu = self.amodel.u.size()[0]
-        self.ny = self.nx + self.nu
-        self.nq = nq
-        self.nv = nq
-
         # Rotation matrix 
         euler_angles = self.x[3:6] 
         roll, pitch, yaw = euler_angles[0], euler_angles[1], euler_angles[2]
 
-        R_x = MX([[1, 0, 0],
-                [0, np.cos(roll), -np.sin(roll)],
-                [0, np.sin(roll), np.cos(roll)]])
+        R_x = vertcat(
+            horzcat(1, 0, 0),
+            horzcat(0, cos(roll), -sin(roll)),
+            horzcat(0, sin(roll), cos(roll)))
 
-        R_y = MX([[np.cos(pitch), 0, np.sin(pitch)],
-                [0, 1, 0],
-                [-np.sin(pitch), 0, np.cos(pitch)]])
-
-        R_z = MX([[np.cos(yaw), -np.sin(yaw), 0],
-                [np.sin(yaw), np.cos(yaw), 0],
-                [0, 0, 1]])
+        R_y = vertcat(
+                horzcat(cos(pitch), 0, sin(pitch)),
+                horzcat(0, 1, 0),
+                horzcat(-sin(pitch), 0, cos(pitch)))
+        
+        R_z = vertcat(
+            horzcat(cos(yaw), -sin(yaw), 0),
+            horzcat(sin(yaw), cos(yaw), 0),
+            horzcat(0, 0, 1))
 
         R_tot = R_z @ R_y @ R_x
 
-        self.Rrpy = Function('R', [self.x], [R_tot])
+        self.R = Function('R', [self.x], [R_tot])
 
         # F and M matrices
         sin_a = np.sin(self.alpha)
@@ -79,15 +72,56 @@ class Model:
         # Control force and torque
         self.fc = Function('fc', [self.x, self.u], [self.R(self.x) @ self.F @ self.u])
         self.tc = Function('tc', [self.u], [self.M @ self.u])
-        
-        self.eps = params.state_tol
+
+
+        Tinv_expr = vertcat(
+            horzcat(1, sin(roll)*tan(pitch), cos(roll)*tan(pitch)),
+            horzcat(0, cos(roll), -sin(roll)),
+            horzcat(0, sin(roll)/cos(pitch), cos(roll)/cos(pitch)))
+
+        self.Tinv = Function('Tinv', [self.x], [Tinv_expr])
+
+        # explicit dynamics
+        self.f_expl = vertcat(
+            self.x[nq:nq+3],
+            self.Tinv(self.x)@self.x[nq+3:],
+            self.g*np.array([0, 0, 1]) + self.fc(self.x, self.u)/self.mass, 
+            np.linalg.inv(self.J) @ (cross(self.x[nq+3:], self.J @ self.x[nq+3:])) + np.linalg.inv(self.J) @ self.tc(self.u)
+        )
+
+        # Acados model
+        self.amodel = AcadosModel()
+        self.amodel.name = params.robot_name
+        self.amodel.x = self.x
+        self.amodel.u = self.u
+        self.amodel.f_expl_expr = self.f_expl
+        self.amodel.p = self.p
+
+        self.nx = self.amodel.x.size()[0]
+        self.nu = self.amodel.u.size()[0]
+        self.ny = self.nx + self.nu
+        self.nq = nq
+        self.nv = nq
+
+        # State bounds
+        # orientation
+        ri = min(abs(-self.mass*self.g/2 * np.tan(self.alpha)), abs(3*self.cf*self.u_bar*sin_a -self.m*self.g/2 * np.tan(self.alpha)))   
+            # supposed to be in case B otherwise ri = abs(-self.mass*self.g/2 * np.tan(self.alpha))
+        phi = np.arctan2(ri, self.mass * self.g) # max inclination allowed for hovering
+
+        # box bounds
+        self.box_wf = MX.sym("box_wf")
+        self.box_wb = MX.sym("box_wb")
+        self.box_hf = MX.sym("box_hf")
+        self.box_hb = MX.sym("box_hb")
+        self.box_lf = MX.sym("box_lf")
+        self.box_lb = MX.sym("box_lb")
 
 class AbstractController:
     def __init__(self, model):
         self.ocp_name = "".join(re.findall('[A-Z][^A-Z]*', self.__class__.__name__)[:-1]).lower()
         self.params = model.params
         self.model = model
-        self.obstacles = obstacles  
 
         self.N = self.params.N
         self.ocp = AcadosOcp()
@@ -146,7 +180,7 @@ class AbstractController:
             self.ocp.constraints.uh_e = np.array(self.nl_ub_e)
 
         # Solver options
-        self.ocp.solver_options.integrator_type = "DISCRETE"
+        self.ocp.solver_options.integrator_type = "ERK"
         self.ocp.solver_options.hessian_approx = "EXACT"
         self.ocp.solver_options.exact_hess_constr = 0
         self.ocp.solver_options.exact_hess_dyn = 0
