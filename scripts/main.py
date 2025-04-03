@@ -10,7 +10,7 @@ import adam
 from adam.numpy import KinDynComputations  
 import torch
 from vboc.parser import Parameters, parse_args
-from vboc.abstract import AdamModel
+from vboc.abstract import Model
 from vboc.controller import ViabilityController
 from vboc.learning import NeuralNetwork, RegressionNN, plot_brs
 
@@ -126,7 +126,7 @@ if __name__ == '__main__':
     ### PARSE ARGUMENTS OF COMMAND LINE 
     args = parse_args()
     # Define the available systems
-    available_systems = ['sth', 'ddr']
+    available_systems = ['sth']
     try:
         if args['system'] not in available_systems:
             raise NameError
@@ -139,9 +139,9 @@ if __name__ == '__main__':
 
     ### DEFINE
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = Model(params, n_dofs)
-    controller = ViabilityController(model, obstacles)
-    # nq = model.nq
+    model = Model(params)
+    controller = ViabilityController(model)
+    nq = model.nq
 
     # Check if data and nn folders exist, if not create it
     if not os.path.exists(params.DATA_DIR):

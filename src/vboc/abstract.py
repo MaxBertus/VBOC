@@ -31,6 +31,7 @@ class Model:
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
         self.u = MX.sym("u", nu)
+        self.p = MX.sym("p", nq)
             
         # Rotation matrix 
         euler_angles = self.x[3:6] 
@@ -106,7 +107,7 @@ class Model:
                                         self.width, self.length, self.height]) 
 
         # Set the parameter vector to only include box_min and box_max
-        self.p = vertcat(self.box_min, self.box_max)
+        self.p = vertcat(self.p, self.box_min, self.box_max)
 
         # Acados model
         self.amodel = AcadosModel()
@@ -139,10 +140,13 @@ class AbstractController:
         self.ocp.model = self.model.amodel
 
         # Cost
-        self.addCost()
+        # Maximize initial velocity
+        self.ocp.cost.cost_type_0 = 'EXTERNAL'
+        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p, self.model.x[self.model.nq:])
+        self.ocp.parameter_values = np.zeros(self.model.nv)
 
         # Constraints
-        # Initial state
+        # Initial shooting node
         self.ocp.constraints.lbx_0 = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx_0 = np.full(self.model.nx, np.inf)  
         self.ocp.constraints.idxbx_0 = np.arange(self.model.nx)       
@@ -157,7 +161,7 @@ class AbstractController:
         self.ocp.constraints.lh_0 = np.array([0.0])
         self.ocp.constraints.uh_0 = np.array([0.0]) 
 
-        # Running states
+        # Path constraints
         self.ocp.constraints.lbx = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx = np.full(self.model.nx, np.inf)   
         self.ocp.constraints.idxbx = np.arange(self.model.nx)       
@@ -165,13 +169,21 @@ class AbstractController:
         self.ocp.constraints.lbx[:3] = self.model.box_min  
         self.ocp.constraints.ubx[:3] = self.model.box_max  
 
-        # Final state
+        # Terminal constraints
         self.ocp.constraints.lbx_e = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx_e = np.full(self.model.nx, np.inf)  
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
         # --- bound on position through the parametrized box ---
         self.ocp.constraints.lbx_e[:3] = self.model.box_min  
         self.ocp.constraints.ubx_e[:3] = self.model.box_max 
+
+        self.ocp.constraints.lbx_e[self.model.nq:] = np.zeros(self.model.nv)
+        self.ocp.constraints.ubx_e[self.model.nq:] = np.zeros(self.model.nv)
+
+        self.ocp.constraints.C = np.zeros((self.model.nv, self.model.nx))
+        self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
+        self.ocp.constraints.lg = np.zeros((self.model.nv,))
+        self.ocp.constraints.ug = np.zeros((self.model.nv,))
 
         # Nonlinear constraint 
         self.nl_con_0, self.nl_lb_0, self.nl_ub_0 = [], [], []
@@ -201,12 +213,6 @@ class AbstractController:
         self.x_guess = np.zeros((self.N, self.model.nx))
         self.u_guess = np.zeros((self.N, self.model.nu))
         self.tol = self.params.cost_tol
-
-    def addCost(self):
-        pass
-
-    def addConstraint(self):
-        pass
 
     def setGuess(self, x_guess, u_guess):
         self.x_guess = x_guess
@@ -240,5 +246,13 @@ class AbstractController:
                 f"self.model.box_occupancy[3:] {self.model.box_occupancy[3:]}"
             )
 
-        # Update the box constraints dynamically
-        self.ocp_solver.set(0, "p", np.hstack([box_min_values, box_max_values]))
+        # Retrieve the current parameter vector p
+        current_p = self.ocp_solver.get(0, "p")
+
+        # Ensure the first nq elements of p remain unchanged
+        updated_p = np.copy(current_p)
+        updated_p[self.model.nq:self.model.nq + 3] = box_min_values
+        updated_p[self.model.nq + 3:self.model.nq + 6] = box_max_values
+
+        # Update the parameter vector in the solver
+        self.ocp_solver.set(0, "p", updated_p)

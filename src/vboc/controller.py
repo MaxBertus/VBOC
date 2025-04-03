@@ -4,36 +4,22 @@ from .abstract import AbstractController
 
 
 class ViabilityController(AbstractController):
-    def __init__(self, model, obstacles=None):
-        super().__init__(model, obstacles)
+    def __init__(self, model):
+        super().__init__(model)
         self.C = np.zeros((self.model.nv, self.model.nx))
 
-    def addCost(self):
-        # Maximize initial velocity
-        self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p, self.model.x[self.model.nq:])
-        self.ocp.parameter_values = np.zeros(self.model.nv)
-
-    def addConstraint(self):
-        q_fin_lb = np.hstack([self.model.x_min[:self.model.nq], np.zeros(self.model.nv)])
-        q_fin_ub = np.hstack([self.model.x_max[:self.model.nq], np.zeros(self.model.nv)])
-
-        self.ocp.constraints.lbx_e = q_fin_lb
-        self.ocp.constraints.ubx_e = q_fin_ub
-        self.ocp.constraints.idxbx_e = np.arange(self.model.nx)
-
-        self.ocp.constraints.C = np.zeros((self.model.nv, self.model.nx))
-        self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
-        self.ocp.constraints.lg = np.zeros((self.model.nv,))
-        self.ocp.constraints.ug = np.zeros((self.model.nv,))
-    
     def solve(self, q_init, d):
         self.ocp_solver.reset()
         for i in range(self.N):
             self.ocp_solver.set(i, 'x', self.x_guess[i])
             self.ocp_solver.set(i, 'u', self.u_guess[i])
-            self.ocp_solver.set(i, 'p', d)
+            pnq = np.copy(self.ocp_solver.get(i, 'p'))
+            pnq[:self.model.nq] = d
+            self.ocp_solver.set(i, 'p', pnq)
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1])
+        pnq = np.copy(self.ocp_solver.get(self.N, 'p'))
+        pnq[:self.model.nq] = d
+        self.ocp_solver.set(self.N, 'p', pnq)
         self.ocp_solver.set(self.N, 'p', d)
 
         # Set the initial constraint

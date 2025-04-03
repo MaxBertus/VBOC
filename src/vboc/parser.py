@@ -76,4 +76,3 @@ class Parameters:
         self.width = float(parameters['width'])
         self.length = float(parameters['length'])
         self.height = float(parameters['height'])
-
