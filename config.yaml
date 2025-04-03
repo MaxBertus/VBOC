@@ -37,3 +37,6 @@ cf: 1.5e-3    # thrust coefficient [N/(Hz)^2]
 ct: 4.590e-5  # torque coefficient [Nm/(Hz)^2]
 max_w: 108    # max spinning rate [Hz]
 alpha: 20     # Tilt cant angle
+width: 1.05   # width of the platform [m]
+length: 0.95   # length of the platform [m]
+height: 0.4  # height of the platform [m]

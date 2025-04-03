@@ -73,4 +73,7 @@ class Parameters:
         self.ct = float(parameters['ct'])
         self.u_bar = float(parameters['max_w'])**2
         self.aplha = np.radians(float(parameters['alpha']))
+        self.width = float(parameters['width'])
+        self.length = float(parameters['length'])
+        self.height = float(parameters['height'])
 
