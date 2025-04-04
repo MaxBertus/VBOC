@@ -27,6 +27,8 @@ class Model:
 
         nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 
         nu = 6 # dimension of input: 6 squared spinning rates
+        npos = 3 # dimension of positon
+        nori = 3 # dimension of orientation
 
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
@@ -34,7 +36,7 @@ class Model:
         self.p = MX.sym("p", nq)
             
         # Rotation matrix 
-        euler_angles = self.x[3:6] 
+        euler_angles = self.x[npos:npos+nori] 
         roll, pitch, yaw = euler_angles[0], euler_angles[1], euler_angles[2]
 
         R_x = vertcat(
@@ -86,13 +88,17 @@ class Model:
 
         # explicit dynamics
         self.f_expl = vertcat(
-            self.x[nq:nq+3],
-            self.Tinv(self.x)@self.x[nq+3:],
+            self.x[nq:nq+npos],
+            self.Tinv(self.x)@self.x[nq+npos:],
             self.g*np.array([0, 0, 1]) + self.fc(self.x, self.u)/self.mass, 
-            np.linalg.inv(self.J) @ (cross(self.x[nq+3:], self.J @ self.x[nq+3:])) + np.linalg.inv(self.J) @ self.tc(self.u)
+            np.linalg.inv(self.J) @ (cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
         )
 
         # BOUNDS
+        # Input 
+        self.u_max = np.array([self.u_bar, self.u_bar, self.u_bar, self.u_bar, self.u_bar, self.u_bar])
+        self.u_min = np.zeros((nu,))
+
         # Orientation
         ri = min(abs(-self.mass*self.g/2 * np.tan(self.alpha)), abs(3*self.cf*self.u_bar*sin_a -self.m*self.g/2 * np.tan(self.alpha)))   
             # supposed to be in case B otherwise ri = abs(-self.mass*self.g/2 * np.tan(self.alpha))
@@ -122,6 +128,8 @@ class Model:
         self.ny = self.nx + self.nu
         self.nq = nq
         self.nv = nq
+        self.npos = npos
+        self.nori = nori
 
 class AbstractController:
     def __init__(self, model):
@@ -132,50 +140,50 @@ class AbstractController:
         self.N = self.params.N
         self.ocp = AcadosOcp()
 
-        # Dimensions
+        # DIMENSIONS
         self.ocp.solver_options.tf = self.params.N * self.params.dt
         self.ocp.dims.N = self.N
 
-        # Model
+        # MODEL
         self.ocp.model = self.model.amodel
 
-        # Cost
+        # COST
         # Maximize initial velocity
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p, self.model.x[self.model.nq:])
+        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
         self.ocp.parameter_values = np.zeros(self.model.nv)
 
-        # Constraints
-        # Initial shooting node
+        # CONSTRAINTS
+        # Initial shooting node constraints
         self.ocp.constraints.lbx_0 = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx_0 = np.full(self.model.nx, np.inf)  
-        self.ocp.constraints.idxbx_0 = np.arange(self.model.nx)       
+        self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
         # --- bound on position through the parametrized box ---
-        self.ocp.constraints.lbx_0[:3] = self.model.box_min  
-        self.ocp.constraints.ubx_0[:3] = self.model.box_max  
+        self.ocp.constraints.lbx_0[:self.model.npos] = self.model.box_min  
+        self.ocp.constraints.ubx_0[:self.model.npos] = self.model.box_max  
         # --- bound on orientation ---
-        self.ocp.constraints.lbx_0[3:5] = -self.model.phi
-        self.ocp.constraints.ubx_0[3:5] = self.model.phi
+        self.ocp.constraints.lbx_0[self.model.npos:self.model.nq-1] = -self.model.phi
+        self.ocp.constraints.ubx_0[self.model.npos:self.model.nq-1] = self.model.phi
 
-        self.model.amodel.con_h_expr_0 = self.model.x[3]**2 + self.model.x[4]**2 - self.model.phi**2
+        self.model.amodel.con_h_expr_0 = self.model.x[self.model.npos]**2 + self.model.x[self.model.npos+1]**2 - self.model.phi**2
         self.ocp.constraints.lh_0 = np.array([0.0])
         self.ocp.constraints.uh_0 = np.array([0.0]) 
 
         # Path constraints
         self.ocp.constraints.lbx = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx = np.full(self.model.nx, np.inf)   
-        self.ocp.constraints.idxbx = np.arange(self.model.nx)       
+        self.ocp.constraints.idxbx = np.arange(self.model.npos)       
         # --- bound on position through the parametrized box ---
-        self.ocp.constraints.lbx[:3] = self.model.box_min  
-        self.ocp.constraints.ubx[:3] = self.model.box_max  
+        self.ocp.constraints.lbx[:self.model.npos] = self.model.box_min  
+        self.ocp.constraints.ubx[:self.model.npos] = self.model.box_max  
 
         # Terminal constraints
         self.ocp.constraints.lbx_e = np.full(self.model.nx, -np.inf)  
         self.ocp.constraints.ubx_e = np.full(self.model.nx, np.inf)  
-        self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
+        self.ocp.constraints.idxbx_e = np.arange(self.model.npos)      
         # --- bound on position through the parametrized box ---
-        self.ocp.constraints.lbx_e[:3] = self.model.box_min  
-        self.ocp.constraints.ubx_e[:3] = self.model.box_max 
+        self.ocp.constraints.lbx_e[:self.model.npos] = self.model.box_min  
+        self.ocp.constraints.ubx_e[:self.model.npos] = self.model.box_max 
 
         self.ocp.constraints.lbx_e[self.model.nq:] = np.zeros(self.model.nv)
         self.ocp.constraints.ubx_e[self.model.nq:] = np.zeros(self.model.nv)
@@ -184,13 +192,13 @@ class AbstractController:
         self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
         self.ocp.constraints.lg = np.zeros((self.model.nv,))
         self.ocp.constraints.ug = np.zeros((self.model.nv,))
-
-        # Nonlinear constraint 
-        self.nl_con_0, self.nl_lb_0, self.nl_ub_0 = [], [], []
-        self.nl_con, self.nl_lb, self.nl_ub = [], [], []
-        self.nl_con_e, self.nl_lb_e, self.nl_ub_e = [], [], []
         
-        # Solver options
+        # Input constraints
+        self.ocp.constraints.lbu = self.model.u_min
+        self.ocp.constraints.ubu = self.model.u_max
+        self.ocp.constraints.idxbu = np.arange(self.model.nu)
+
+        # SOLVER OPTIONS
         self.ocp.solver_options.integrator_type = "ERK"
         self.ocp.solver_options.hessian_approx = "EXACT"
         self.ocp.solver_options.exact_hess_constr = 0
@@ -226,33 +234,31 @@ class AbstractController:
         self.ocp_solver.set_new_time_steps(np.full(N, self.params.dt))
         self.ocp_solver.update_qp_solver_cond_N(N)
 
-    def update_box_constraints(self, box_min_values, box_max_values):
-        """
-        Update the box constraints dynamically, ensuring that:
-        - box_min_values are below or equal to self.model.box_occupancy[:3]
-        - box_max_values are above or equal to self.model.box_occupancy[3:]
-        """
-        # Check if box_min_values are below or equal to box_occupancy[:3]
-        if not np.all(box_min_values <= self.model.box_occupancy[:3]):
+    def update_p(self, index, d, box_min_values, box_max_values):
+        # Check if box_min_values are below or equal to box_occupancy[:self.model.npos]
+        if not np.all(box_min_values <= self.model.box_occupancy[:self.model.npos]):
             raise ValueError(
                 f"box_min_values {box_min_values} must be below or equal to "
-                f"self.model.box_occupancy[:3] {self.model.box_occupancy[:3]}"
+                f"self.model.box_occupancy[:self.model.npos] {self.model.box_occupancy[:self.model.npos]}"
             )
 
-        # Check if box_max_values are above or equal to box_occupancy[3:]
-        if not np.all(box_max_values >= self.model.box_occupancy[3:]):
+        # Check if box_max_values are above or equal to box_occupancy[self.model.npos:]
+        if not np.all(box_max_values >= self.model.box_occupancy[self.model.npos:]):
             raise ValueError(
                 f"box_max_values {box_max_values} must be above or equal to "
-                f"self.model.box_occupancy[3:] {self.model.box_occupancy[3:]}"
+                f"self.model.box_occupancy[self.model.npos:] {self.model.box_occupancy[self.model.npos:]}"
             )
 
         # Retrieve the current parameter vector p
-        current_p = self.ocp_solver.get(0, "p")
+        cur_p = self.ocp_solver.get(index, "p")
 
         # Ensure the first nq elements of p remain unchanged
-        updated_p = np.copy(current_p)
-        updated_p[self.model.nq:self.model.nq + 3] = box_min_values
-        updated_p[self.model.nq + 3:self.model.nq + 6] = box_max_values
+        upd_p = np.copy(cur_p)
+        upd_p[:self.model.nq] = d
+        upd_p[self.model.nv : self.model.nv+self.model.npos] = box_min_values
+        upd_p[self.model.nv+self.model.npos:] = box_max_values
 
         # Update the parameter vector in the solver
-        self.ocp_solver.set(0, "p", updated_p)
+        self.ocp_solver.set(index, "p", upd_p)
+
+        

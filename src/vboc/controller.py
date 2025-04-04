@@ -8,18 +8,14 @@ class ViabilityController(AbstractController):
         super().__init__(model)
         self.C = np.zeros((self.model.nv, self.model.nx))
 
-    def solve(self, q_init, d):
+    def solve(self, q_init, d, box_min_values, box_max_values):
         self.ocp_solver.reset()
         for i in range(self.N):
             self.ocp_solver.set(i, 'x', self.x_guess[i])
             self.ocp_solver.set(i, 'u', self.u_guess[i])
-            pnq = np.copy(self.ocp_solver.get(i, 'p'))
-            pnq[:self.model.nq] = d
-            self.ocp_solver.set(i, 'p', pnq)
+            self.update_p(i, q_init, d, box_min_values, box_max_values)
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1])
-        pnq = np.copy(self.ocp_solver.get(self.N, 'p'))
-        pnq[:self.model.nq] = d
-        self.ocp_solver.set(self.N, 'p', pnq)
+        self.update_p(self.N, q_init, d, box_min_values, box_max_values)
         self.ocp_solver.set(self.N, 'p', d)
 
         # Set the initial constraint
@@ -28,15 +24,15 @@ class ViabilityController(AbstractController):
         self.ocp_solver.constraints_set(0, "C", self.C, api='new')
 
         # Set initial bounds -> x0_pos = q_init, x0_vel free; (final bounds already set)
-        q_init_lb = np.hstack([q_init, self.model.x_min[self.model.nq:]])
-        q_init_ub = np.hstack([q_init, self.model.x_max[self.model.nq:]])
+        q_init_lb = np.hstack([q_init, np.full((self.model.nv,), -np.inf)])
+        q_init_ub = np.hstack([q_init, np.full((self.model.nv,), np.inf)])
         self.ocp_solver.constraints_set(0, "lbx", q_init_lb)
         self.ocp_solver.constraints_set(0, "ubx", q_init_ub)
 
         # Solve the OCP
         return self.ocp_solver.solve()
     
-    def solveVBOC(self, q, d, N_start, n=1, repeat=10):
+    def solveVBOC(self, q, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
         N = N_start
         gamma = 0
         x_sol, u_sol = None, None
@@ -45,7 +41,7 @@ class ViabilityController(AbstractController):
         #     repeat = 1
         for _ in range(repeat):
             # Solve the OCP
-            status = self.solve(q, d)
+            status = self.solve(q, d, box_min_values, box_max_values)
             if status == 0 or status == 2:
                 # Compare the current cost with the previous one:
                 x0 = self.ocp_solver.get(0, "x")
@@ -53,6 +49,7 @@ class ViabilityController(AbstractController):
 
                 if gamma_new < gamma + self.tol and status == 0:
                     break
+                
                 gamma = gamma_new
 
                 # Rollout the solution
