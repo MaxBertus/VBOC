@@ -20,9 +20,12 @@ class Model:
         self.g = 9.81
         self.u_bar = params.u_bar
         self.alpha = params.alpha
-        self.width = params.width
-        self.length = params.length
-        self.height = params.height
+        self.min_width = params.min_width
+        self.min_length = params.min_length
+        self.min_height = params.min_height
+        self.max_width = params.max_width
+        self.max_length = params.max_length
+        self.max_height = params.max_height
         self.eps = params.state_tol
 
         nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 
@@ -109,8 +112,16 @@ class Model:
         self.box_min = MX.sym("box_min", 3)  # [box_min_x, box_min_y, box_min_z]
         self.box_max = MX.sym("box_max", 3)  # [box_max_x, box_max_y, box_max_z]
 
-        self.box_occupancy = np.array([-self.width, -self.length, -self.height,
-                                        self.width, self.length, self.height]) 
+        # self.box_occupancy = np.array([-self.min_width, -self.min_length, -self.min_height,
+        #                                 self.min_width, self.min_length, self.min_height]) 
+        
+        side = np.max([self.min_width, self.min_length, self.min_height])
+        self.box_occupancy = np.array([-side, -side, -side,
+                                        side, side, side])
+
+
+        self.env_dimensions = np.array([-self.max_width, -self.max_length, -self.max_height,
+                                        self.max_width, self.max_length, self.max_height]) 
 
         # Set the parameter vector to only include box_min and box_max
         self.p = vertcat(self.p, self.box_min, self.box_max)
@@ -159,15 +170,15 @@ class AbstractController:
         self.ocp.constraints.ubx_0 = np.full(self.model.nx, np.inf)  
         self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
         # --- bound on position through the parametrized box ---
-        self.ocp.constraints.lbx_0[:self.model.npos] = self.model.box_min  
-        self.ocp.constraints.ubx_0[:self.model.npos] = self.model.box_max  
+        # self.ocp.constraints.lbx_0[:self.model.npos] = self.model.box_min  
+        # self.ocp.constraints.ubx_0[:self.model.npos] = self.model.box_max  
         # --- bound on orientation ---
-        self.ocp.constraints.lbx_0[self.model.npos:self.model.nq-1] = -self.model.phi
-        self.ocp.constraints.ubx_0[self.model.npos:self.model.nq-1] = self.model.phi
+        # self.ocp.constraints.lbx_0[self.model.npos:self.model.nq-1] = -self.model.phi
+        # self.ocp.constraints.ubx_0[self.model.npos:self.model.nq-1] = self.model.phi
 
-        self.model.amodel.con_h_expr_0 = self.model.x[self.model.npos]**2 + self.model.x[self.model.npos+1]**2 - self.model.phi**2
-        self.ocp.constraints.lh_0 = np.array([0.0])
-        self.ocp.constraints.uh_0 = np.array([0.0]) 
+        # self.model.amodel.con_h_expr_0 = self.model.x[self.model.npos]**2 + self.model.x[self.model.npos+1]**2 - self.model.phi**2
+        # self.ocp.constraints.lh_0 = np.array([0.0])
+        # self.ocp.constraints.uh_0 = np.array([0.0]) 
 
         # Path constraints
         self.ocp.constraints.lbx = np.full(self.model.nx, -np.inf)  

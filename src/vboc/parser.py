@@ -10,8 +10,6 @@ def parse_args():
                         help='Systems to test. Available: sth (Star-shaped Tilted Hexarotor), ddr (Differential Drive Robot - maybe in future)')
     parser.add_argument('-b', '--build', action='store_true',
                         help='Build the code of the embedded controller')
-    parser.add_argument('-v', '--vboc', action='store_true',
-                        help='Compute data on border of the viability kernel')
     parser.add_argument('--horizon', type=int, default=45,
                         help='Horizon of the optimal control problem')
     parser.add_argument('-t', '--training', action='store_true',
@@ -73,6 +71,11 @@ class Parameters:
         self.ct = float(parameters['ct'])
         self.u_bar = float(parameters['max_w'])**2
         self.aplha = np.radians(float(parameters['alpha']))
-        self.width = float(parameters['width'])
-        self.length = float(parameters['length'])
-        self.height = float(parameters['height'])
+
+        self.min_width = float(parameters['min_width'])
+        self.min_length = float(parameters['min_length'])
+        self.min_height = float(parameters['min_height'])
+
+        self.max_width = float(parameters['max_width'])
+        self.max_length = float(parameters['max_length'])
+        self.max_height = float(parameters['max_height'])

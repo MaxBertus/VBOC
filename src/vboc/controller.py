@@ -13,9 +13,9 @@ class ViabilityController(AbstractController):
         for i in range(self.N):
             self.ocp_solver.set(i, 'x', self.x_guess[i])
             self.ocp_solver.set(i, 'u', self.u_guess[i])
-            self.update_p(i, q_init, d, box_min_values, box_max_values)
+            self.update_p(i, d, box_min_values, box_max_values)
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1])
-        self.update_p(self.N, q_init, d, box_min_values, box_max_values)
+        self.update_p(self.N, d, box_min_values, box_max_values)
         self.ocp_solver.set(self.N, 'p', d)
 
         # Set the initial constraint
@@ -32,7 +32,7 @@ class ViabilityController(AbstractController):
         # Solve the OCP
         return self.ocp_solver.solve()
     
-    def solveVBOC(self, q, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
+    def solveVBOC(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
         N = N_start
         gamma = 0
         x_sol, u_sol = None, None
@@ -41,7 +41,7 @@ class ViabilityController(AbstractController):
         #     repeat = 1
         for _ in range(repeat):
             # Solve the OCP
-            status = self.solve(q, d, box_min_values, box_max_values)
+            status = self.solve(q_init, d, box_min_values, box_max_values)
             if status == 0 or status == 2:
                 # Compare the current cost with the previous one:
                 x0 = self.ocp_solver.get(0, "x")
