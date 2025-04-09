@@ -35,7 +35,7 @@ def computeDataOnBorder(q, N_guess, box_min_values, box_max_values):
     else:
         return x_star[0], x_star, u_star, status
     
-def fixedVelocityDir(N_guess, n_pts=100):
+def fixedVelocityDir(N_guess, n_pts=100):   # FIXME: to verify
     """ Compute data on section of the viability kernel"""
     sec_pts = []
     status_list = []
@@ -77,7 +77,7 @@ def fixedVelocityDir(N_guess, n_pts=100):
         status_list.append(status_vec)
     return sec_pts, status_list
 
-class Sine(torch.nn.Module):
+class Sine(torch.nn.Module):    # FIXME: to verify
     def __init__(self, alpha=1.):
         super().__init__()
         self.alpha = alpha
@@ -85,7 +85,7 @@ class Sine(torch.nn.Module):
     def forward(self, x):
         return torch.sin(self.alpha * x)
 
-class OverMSELoss(torch.nn.Module):
+class OverMSELoss(torch.nn.Module): # FIXME: to verify
     """ Custom MSE loss that penalizes more overestimates """
     def __init__(self, alpha=1., beta=0.6):
         super(OverMSELoss, self).__init__()
@@ -97,7 +97,7 @@ class OverMSELoss(torch.nn.Module):
         l2_over = torch.mean(torch.relu(y_pred - y_true) ** 2) 
         return self.alpha * l2 + self.beta * l2_over
     
-class RAELoss(torch.nn.Module):
+class RAELoss(torch.nn.Module): # FIXME: to verify
     """ Relative Absolute Error loss """
     def __init__(self):
         super(RAELoss, self).__init__()
@@ -107,7 +107,7 @@ class RAELoss(torch.nn.Module):
         den = torch.sum(torch.abs(y_true - torch.mean(y_true)))
         return num / den
     
-class CustomLoss(torch.nn.Module):
+class CustomLoss(torch.nn.Module):  # FIXME: to verify
     """ Custom loss function (MSE + RE on overestimates) """
     def __init__(self, alpha=1., beta=0.6):
         super(CustomLoss, self).__init__()
@@ -142,6 +142,7 @@ if __name__ == '__main__':
     model = Model(params)
     controller = ViabilityController(model)
     nq = model.nq
+    nu = model.nu
 
     # Check if data and nn folders exist, if not create it
     if not os.path.exists(params.DATA_DIR):
@@ -173,7 +174,8 @@ if __name__ == '__main__':
     act_fun = nls[act]
     nn_filename = f'{params.NN_DIR}_{act}.pt'
     if act in ['tanh', 'sine']:
-        ub = max(model.x_max[nq:]) * np.sqrt(nq)    # TODO: check this
+        # ub = max(model.x_max[nq:]) * np.sqrt(nq)    # FIXME: check this
+        ub = 1
     else:
         ub = 1
 
@@ -191,7 +193,6 @@ if __name__ == '__main__':
 
     # Generate random box
     box_min_values = np.array([np.random.uniform(model.box_occupancy[:3], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-
     box_max_values = np.array([np.random.uniform(model.box_occupancy[3:], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
 
@@ -200,10 +201,7 @@ if __name__ == '__main__':
         # inputs --> (initial random configuration, horizon)
         # res = p.starmap(computeDataOnBorder, [(q0, N) for q0 in q_init])
 
-        res = p.starmap(computeDataOnBorder, [(q0, N, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)]) # TODO: check this
-    
-
-    # RESTART FROM HERE
+        res = p.starmap(computeDataOnBorder, [(q0, N, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
 
     x_data_temp, x_t, u_t, status = zip(*res)
     x_data = np.vstack([i for i in x_data_temp if i is not None])
@@ -213,51 +211,46 @@ if __name__ == '__main__':
     solved = len(x_data)
     print('Perc solved/numb of problems: %.2f' % (solved / params.prob_num * 100))
     print('Total number of points: %d' % len(x_data))
-    np.save(f'{params.DATA_DIR}{nq}dof_vboc{obs_string}', x_data)
-    np.save(f'{params.DATA_DIR}{nq}dof_trajx{obs_string}', x_traj)
+    np.save(f'{params.DATA_DIR}_vboc', x_data)
+    np.save(f'{params.DATA_DIR}_trajx', x_traj)
     # np.save(params.DATA_DIR + str(nq) + 'dof_traju', u_traj)
 
-    
-
     # Plot trajectory solution
-    PLOTSSS = 0
+    plot_solutions = 0
 
-    if PLOTSSS:
+    if plot_solutions:
+        states_title = ['Pos. in x', 'Pos. in y', 'Pos. in z', 'Roll', 'Pitch', 'Yaw']
+        states = ['x [m]', 'y [m]', 'z [m]', 'Roll [rad]', 'Pitch [rad]', 'Yaw [rad]']
+        states_der = ['vx [m/s]', 'vy [m/s]', 'vz [m/s]', 'wroll [rad/s]', 'wpitch [rad/s]', 'wyaw [rad/s]']
         colors = np.linspace(0, 1, horizon)
         t = np.linspace(0, horizon * params.dt, horizon)
-        def computed_torque(x, u):
-            tau = np.zeros((len(x), nq))
-            for i in range(len(x)):
-                tau[i] = kin_dyn.mass_matrix(model.H_b, x[i, :nq])[6:, 6:] @ u[i] + \
-                            kin_dyn.bias_force(model.H_b, x[i, :nq], np.zeros(6), x[i, nq:])[6:]
-            return tau
+
         # clear the plots directory
         for file in os.listdir(params.DATA_DIR + '/plots'):
             os.remove(params.DATA_DIR + '/plots/' + file)
         for k in range(len(x_traj)):
-            fig, ax = plt.subplots(2, 2)
+            fig, ax = plt.subplots(2, 3)
             ax = ax.reshape(-1)
             for i in range(nq):
                 ax[i].grid(True)
                 ax[i].scatter(x_traj[k][:, i], x_traj[k][:, nq + i], c=colors, cmap='coolwarm')
-                ax[i].set_xlim([model.x_min[i], model.x_max[i]])
-                ax[i].set_ylim([model.x_min[nq + i], model.x_max[nq + i]])
-                ax[i].set_title(f'Joint {i + 1}')
-                ax[i].set_xlabel(f'q_{i + 1}')
-                ax[i].set_ylabel(f'dq_{i + 1}')
+                # ax[i].set_xlim([model.x_min[i], model.x_max[i]])
+                # ax[i].set_ylim([model.x_min[nq + i], model.x_max[nq + i]])
+                ax[i].set_title(f'{states_title[i]}')
+                ax[i].set_xlabel(f'{states[i]}')
+                ax[i].set_ylabel(f'{states_der[i]}')
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
             plt.savefig(params.DATA_DIR + f'/plots/traj_{k + 1}.png')
             plt.close(fig)
 
-            fig, ax = plt.subplots(2, 2)
+            fig, ax = plt.subplots(2, 3)
             ax = ax.reshape(-1)
             for i in range(nq):
                 ax[i].grid(True)
-                ax[i].plot(t, x_traj[k][:, nq + i], label=f'v_{i + 1}')
-                ax[i].plot(t, u_traj[k][:, i], label=f'a_{i + 1}')
-                ax[i].axhline(model.x_min[nq + i], color='b', linestyle='--')
-                ax[i].axhline(model.x_max[nq + i], color='b', linestyle='--')
+                ax[i].plot(t, x_traj[k][:, nq + i], label=f'{states_der[i]}')
+                # ax[i].axhline(model.x_min[nq + i], color='b', linestyle='--')
+                # ax[i].axhline(model.x_max[nq + i], color='b', linestyle='--')
                 ax[i].set_xlabel('Time [s]')
                 ax[i].set_ylabel('Velocity [rad/s]')
                 # ax[i].set_ylim([model.x_min[nq + i], model.x_max[nq + i]])
@@ -267,19 +260,22 @@ if __name__ == '__main__':
             plt.savefig(params.DATA_DIR + f'/plots/vel_{k + 1}.png')
             plt.close(fig)
 
-            fig, ax = plt.subplots(2, 2)
+            fig, ax = plt.subplots(2, 3)
             ax = ax.reshape(-1)
-            for i in range(nq):
+            for i in range(nu):
                 ax[i].grid(True)
-                ax[i].plot(t, computed_torque(x_traj[k], u_traj[k])[:, i], label=f'tau_{i + 1}')
+                ax[i].plot(t, u_traj[k][:, i], label=f'u_{i + 1}')
+                # ax[i].axhline(model.x_min[nq + i], color='b', linestyle='--')
+                # ax[i].axhline(model.x_max[nq + i], color='b', linestyle='--')
                 ax[i].set_xlabel('Time [s]')
-                ax[i].set_ylabel('Torque [Nm]')
-                ax[i].set_ylim([model.tau_min[i], model.tau_max[i]])
+                ax[i].set_ylabel('Spinning rate^2 [rad^2/s^2]')
+                # ax[i].set_ylim([model.x_min[nq + i], model.x_max[nq + i]])
                 ax[i].legend()
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
-            plt.savefig(params.DATA_DIR + f'/plots/torque_{k + 1}.png')
+            plt.savefig(params.DATA_DIR + f'/plots/input_{k + 1}.png')
             plt.close(fig)
+
 
     # histogram of status
     plt.figure()
@@ -290,9 +286,9 @@ if __name__ == '__main__':
     plt.xticks(range(5))
 
     # TRAINING
-    if args['training']:
+    if args['training']: # FIXME: to verify
         # Load the data
-        x_data = np.load(f'{params.DATA_DIR}{nq}dof_vboc{obs_string}.npy')
+        x_data = np.load(f'{params.DATA_DIR}{nq}dof_vboc.npy')
         np.random.shuffle(x_data)
         
         nn_model = NeuralNetwork(model.nx, 256, 1, act_fun, ub).to(device)
@@ -380,7 +376,7 @@ if __name__ == '__main__':
         # plt.savefig(params.DATA_DIR + 'difference.png')
 
     # PLOT THE VIABILITY KERNEL
-    if args['plot']:
+    if args['plot']:    # FIXME: to verify
         nn_data = torch.load(nn_filename)
         nn_model = NeuralNetwork(model.nx, 256, 1, act_fun, ub)
         nn_model.load_state_dict(nn_data['model'])
