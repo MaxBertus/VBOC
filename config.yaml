@@ -1,4 +1,4 @@
-prob_num: 600000          # number of OCP to create dataset
+prob_num: 1000          # number of OCP to create dataset
 n_steps: 200              # number of time steps in each test
 cpu_num: 26
 
@@ -44,4 +44,4 @@ min_height: 0.2   # height/2 of the platform [m]
 
 max_width: 5 # max width/2 of the environment [m]
 max_length: 5 # max length/2 of the environment [m]
-min_height: 5 # min width/2 of the environment [m]
+max_height: 5 # min width/2 of the environment [m]
