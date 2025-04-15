@@ -7,7 +7,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--system', type=str, default='sth',
-                        help='Systems to test. Available: sth (Star-shaped Tilted Hexarotor), ddr (Differential Drive Robot - maybe in future)')
+                        help='Systems to test. Available: sth (Star-shaped Tilted Hexarotor)')
     parser.add_argument('-b', '--build', action='store_true',
                         help='Build the code of the embedded controller')
     parser.add_argument('--horizon', type=int, default=45,
@@ -21,7 +21,6 @@ def parse_args():
     parser.add_argument('-a', '--activation', type=str, default='relu',
                         help='Activation function for the neural network')
     return vars(parser.parse_args())
-
 
 class Parameters:
     def __init__(self, robot_name):
@@ -38,11 +37,11 @@ class Parameters:
         self.prob_num = int(parameters['prob_num'])
         self.n_steps = int(parameters['n_steps'])
         self.cpu_num = int(parameters['cpu_num'])
-        self.build = False
+        # self.build = False
         
         self.N = int(parameters['N'])
         self.dt = float(parameters['dt'])
-        self.alpha = int(parameters['alpha'])
+        #self.alpha = int(parameters['alpha'])
 
         self.solver_type = 'SQP'
         self.solver_mode = parameters['solver_mode']
@@ -70,7 +69,7 @@ class Parameters:
         self.cf = float(parameters['cf'])
         self.ct = float(parameters['ct'])
         self.u_bar = float(parameters['max_w'])**2
-        self.aplha = np.radians(float(parameters['alpha']))
+        self.alpha_tilt = (float(parameters['alpha_tilt']))
 
         self.min_width = float(parameters['min_width'])
         self.min_length = float(parameters['min_length'])
@@ -79,3 +78,7 @@ class Parameters:
         self.max_width = float(parameters['max_width'])
         self.max_length = float(parameters['max_length'])
         self.max_height = float(parameters['max_height'])
+
+        self.orient_g_rej = bool(parameters['orient_g_rej'])
+
+        self.plot_solutions = bool(parameters['plot_solutions'])

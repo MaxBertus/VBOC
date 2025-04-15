@@ -77,14 +77,7 @@ class ViabilityController(AbstractController):
                 # Increase the horizon
                 N += n
                 self.resetHorizon(N)
-            else:
-                # print(f"Solver failed with status {status}")
-                # print("Residuals:")
-                # print(self.ocp_solver.get_stats('residuals'))
-                # print("QP Solver Iterations:")
-                # print(self.ocp_solver.get_stats('qp_iter'))
-                # print("SQP Iterations:")
-                # print(self.ocp_solver.get_stats('sqp_iter'))                
+            else:     
                 return None, None, None, status
         if status == 0:
             return x_sol, u_sol, N, status

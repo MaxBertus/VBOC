@@ -19,7 +19,7 @@ class Model:
         self.r = self.cf / self.ct * self.l
         self.g = 9.81
         self.u_bar = params.u_bar
-        self.alpha = params.alpha
+        self.alpha_tilt = params.alpha_tilt
         self.min_width = params.min_width
         self.min_length = params.min_length
         self.min_height = params.min_height
@@ -62,8 +62,8 @@ class Model:
         self.R = Function('R', [self.x], [R_tot])
 
         # F and M matrices
-        sin_a = np.sin(self.alpha)
-        cos_a = np.cos(self.alpha)
+        sin_a = np.sin(self.alpha_tilt)
+        cos_a = np.cos(self.alpha_tilt)
 
         self.F = self.cf * np.array([
         [0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a, 0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a],
@@ -81,7 +81,6 @@ class Model:
         self.fc = Function('fc', [self.x, self.u], [self.R(self.x) @ self.F @ self.u])
         self.tc = Function('tc', [self.u], [self.M @ self.u])
 
-
         Tinv_expr = vertcat(
             horzcat(1, sin(roll)*tan(pitch), cos(roll)*tan(pitch)),
             horzcat(0, cos(roll), -sin(roll)),
@@ -93,7 +92,7 @@ class Model:
         self.f_expl = vertcat(
             self.x[nq:nq+npos],
             self.Tinv(self.x)@self.x[nq+npos:],
-            self.g*np.array([0, 0, 1]) + self.fc(self.x, self.u)/self.mass, 
+            -self.g*np.array([0, 0, 1]) + self.fc(self.x, self.u)/self.mass, 
             np.linalg.inv(self.J) @ (cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
         )
 
@@ -103,9 +102,10 @@ class Model:
         self.u_min = np.zeros((nu,))
 
         # Orientation
-        ri = min(abs(-self.mass*self.g/2 * np.tan(self.alpha)), abs(3*self.cf*self.u_bar*sin_a -self.mass*self.g/2 * np.tan(self.alpha)))   
-            # supposed to be in case B otherwise ri = abs(-self.mass*self.g/2 * np.tan(self.alpha))
-        self.phi = np.arctan2(ri, self.mass * self.g) # max inclination allowed for hovering
+        ri = min(abs(-self.mass*self.g/2 * np.tan(self.alpha_tilt)), abs(3*self.cf*self.u_bar*sin_a -self.mass*self.g/2 * np.tan(self.alpha_tilt)))   
+            # supposed to be in case B otherwise ri = abs(-self.mass*self.g/2 * np.tan(self.alpha_tilt))
+        self.phi_hovering = np.arctan2(ri, self.mass * self.g) # max inclination allowed for hovering
+        self.phi_max = np.arccos((self.mass*self.g)/(self.cf * 6 * np.cos(self.alpha_tilt)*self.u_bar))
 
         # Position
         # Define symbolic parameters for the box bounds

@@ -13,6 +13,9 @@ from vboc.parser import Parameters, parse_args
 from vboc.abstract import Model
 from vboc.controller import ViabilityController
 from vboc.learning import NeuralNetwork, RegressionNN, plot_brs
+from scipy.spatial.transform import Rotation as Rot
+import shutil
+from mpl_toolkits.mplot3d import Axes3D
 
 def computeDataOnBorder(q, N_guess, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
@@ -77,6 +80,91 @@ def fixedVelocityDir(N_guess, n_pts=100):   # NOTE: to verify
         status_list.append(status_vec)
     return sec_pts, status_list
 
+def generate_constrained_rpy(min_inclination, max_inclination, n_samples):
+    """
+    Generates N uniformly distributed orientations satisfying Z-angle constraint.
+    Uses rejection sampling based on random quaternions.
+
+    Args:
+        a_deg (float): Minimum angle between original Z and rotated Z (degrees).
+        b_deg (float): Maximum angle between original Z and rotated Z (degrees).
+        n_samples (int): Number of orientations to generate.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            roll (n,), pitch (n,), yaw (n,) arrays in radians.
+    """
+
+    # Input validation
+    if not (
+        isinstance(min_inclination, (int, float)) and
+        isinstance(max_inclination, (int, float)) and
+        isinstance(n_samples, int) and
+        0 <= min_inclination <= max_inclination <= 180 and
+        n_samples >= 0
+    ):
+        raise ValueError("Invalid input arguments. Check ranges (0<=a<=b<=180) and types.")
+
+    if n_samples == 0:
+        return np.array([]), np.array([]), np.array([])
+
+    roll_list = []
+    pitch_list = []
+    yaw_list = []
+
+    count = 0
+    tries = 0
+    max_tries = max(n_samples * 100, 10000)
+
+    while count < n_samples and tries < max_tries:
+        tries += 1
+
+        # Generate random quaternion and convert to rotation matrix
+        quat = Rot.random().as_quat()  # [x, y, z, w]
+        rot = Rot.from_quat(quat).as_matrix()
+
+        # Check Z-angle constraint
+        cos_theta = np.clip(rot[2, 2], -1.0, 1.0)
+        theta = np.arccos(cos_theta)
+
+        if min_inclination <= theta <= max_inclination:
+            # Convert to euler and split to roll, pitch, yaw
+            eul = Rot.from_matrix(rot).as_euler('ZYX')  # [yaw, pitch, roll]
+            yaw, pitch, roll = eul
+            roll_list.append(roll)
+            pitch_list.append(pitch)
+            yaw_list.append(yaw)
+            count += 1
+
+    if count < n_samples:
+        print(f"Warning: Maximum tries ({max_tries}) exceeded. Found {count}/{n_samples} samples.")
+
+    return (
+        np.array(roll_list),
+        np.array(pitch_list),
+        np.array(yaw_list)
+    )
+
+def set_axes_equal(ax):
+    """Set equal aspect ratio for a 3D plot."""
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    y_range = abs(y_limits[1] - y_limits[0])
+    z_range = abs(z_limits[1] - z_limits[0])
+
+    max_range = max(x_range, y_range, z_range)
+
+    x_middle = np.mean(x_limits)
+    y_middle = np.mean(y_limits)
+    z_middle = np.mean(z_limits)
+
+    ax.set_xlim3d([x_middle - max_range / 2, x_middle + max_range / 2])
+    ax.set_ylim3d([y_middle - max_range / 2, y_middle + max_range / 2])
+    ax.set_zlim3d([z_middle - max_range / 2, z_middle + max_range / 2])
+
 class Sine(torch.nn.Module):    # NOTE: to verify
     def __init__(self, alpha=1.):
         super().__init__()
@@ -137,7 +225,7 @@ if __name__ == '__main__':
     params.build = args['build']
     act = args['activation']
 
-    ### DEFINE
+    ### DEFINE THE MODEL
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = Model(params)
     controller = ViabilityController(model)
@@ -183,10 +271,16 @@ if __name__ == '__main__':
     # Generate random initial configurations
     pos_init = np.zeros((params.prob_num, model.npos))
 
-    roll = np.random.uniform(-model.phi, model.phi, size=(params.prob_num, 1))
-    pitch = np.sqrt(model.phi**2 - roll**2) * np.random.choice([1, -1], size=(params.prob_num, 1))
-    yaw = np.random.uniform(-np.pi, np.pi, size=(params.prob_num, 1))
-    orient_init = np.hstack([roll, pitch, yaw])
+    # Initial orientation 
+    if(params.orient_g_rej):
+        min_phi = 0.0
+        max_phi = model.phi_hovering
+    else:
+        min_phi = model.phi_max
+        max_phi = np.pi/2 
+
+    roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
+    orient_init = np.column_stack([roll, pitch, yaw])
     # orient_init = np.zeros((params.prob_num, model.nori))
 
     q_init = np.hstack([pos_init, orient_init])
@@ -224,12 +318,12 @@ if __name__ == '__main__':
     np.save(f'{params.DATA_DIR}_vboc', x_data)
     np.save(f'{params.DATA_DIR}_trajx', x_traj)
 
-    # Plot trajectory solution
-    plot_solutions = 1
+    # PLOT THE SOLUTIONS
+    if params.plot_solutions:
 
-    if plot_solutions:
+        # Labels and titles
         pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
-        extended_title = ['Position', 'Orientation']
+        extended_pose_title = ['Position', 'Orientation']
         velocities_title = ['Linear velocity', 'Angular velocity']
         pose_label = ['x [m]', 'y [m]', 'z [m]', '$\phi$ [rad]', '\u03B8 [rad]', '$\gamma$ [rad]']
         pose_legend = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
@@ -237,17 +331,37 @@ if __name__ == '__main__':
         vel_legend = ['v$_x$', 'v$_y$', 'v$_z$', '$\omega_x$', '$\omega_y$', '$\omega_z$']
         y_lab_pose = ['Pos. [m]', 'Orient. [rad]']
         y_lab_vel = ['v [m/s]', '$\omega$ [rad/s]']
+
+        # Define the color map
         colors = np.linspace(0, 1, horizon)
         t = np.linspace(0, horizon * params.dt, horizon)
 
-        # clear the plots directory
-        if not os.path.exists(params.DATA_DIR + 'plots'):
-            os.makedirs(params.DATA_DIR + 'plots')
-        else:
-            for file in os.listdir(params.DATA_DIR + 'plots'):
-                os.remove(params.DATA_DIR + 'plots/' + file)
+        # Clear the plots directory and create subfolders
+        plots_dir = os.path.join(params.DATA_DIR, 'plots')
+        traj_dir = os.path.join(plots_dir, 'trajectories')
+        pose_dir = os.path.join(plots_dir, 'poses')
+        velocity_dir = os.path.join(plots_dir, 'velocities')
+        input_dir = os.path.join(plots_dir, 'inputs')
+        threeD_dir = os.path.join(plots_dir, '3D')
 
-        # Plot  
+        if not os.path.exists(plots_dir):
+            os.makedirs(plots_dir)
+        else:
+            for file in os.listdir(plots_dir):
+                file_path = os.path.join(plots_dir, file)
+                if os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Remove directories
+                else:
+                    os.remove(file_path)  # Remove files
+
+        # Create subfolders for each type of plot
+        os.makedirs(traj_dir, exist_ok=True)
+        os.makedirs(pose_dir, exist_ok=True)
+        os.makedirs(velocity_dir, exist_ok=True)
+        os.makedirs(input_dir, exist_ok=True)
+        os.makedirs(threeD_dir, exist_ok=True)
+
+        # Start plotting 
         for k in range(len(x_traj)):
 
             traj_xlim_min = b_min[k].tolist() + [-np.pi/2, -np.pi/2, -np.pi]
@@ -264,7 +378,7 @@ if __name__ == '__main__':
                 ax[i].set_ylabel(f'{vel_label[i]}')
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
-            plt.savefig(params.DATA_DIR + f'plots/traj_{k + 1}.png')
+            plt.savefig(os.path.join(traj_dir, f'traj_{k + 1}.png'))
             plt.close(fig)
 
             # Plot pose
@@ -275,14 +389,16 @@ if __name__ == '__main__':
                 if i == model.npos:
                     j += 1
                 ax[j].grid(True)
-                ax[j].set_title(f'{pose_title[j]}')
-                ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+                ax[j].set_title(f'{extended_pose_title[j]}')
+                line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+                # ax[j].axhline(traj_xlim_min[i], color=line.get_color(), linestyle='--', linewidth=0.8)
+                # ax[j].axhline(traj_xlim_max[i], color=line.get_color(), linestyle='--', linewidth=0.8)
                 ax[j].set_xlabel('Time [s]')
                 ax[j].set_ylabel(y_lab_pose[j])
                 ax[j].legend()
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
-            plt.savefig(params.DATA_DIR + f'plots/pose_{k + 1}.png')
+            plt.savefig(os.path.join(pose_dir, f'pose_{k + 1}.png'))
             plt.close(fig)
 
             # Plot velocities
@@ -300,7 +416,7 @@ if __name__ == '__main__':
                 ax[j].legend()
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
-            plt.savefig(params.DATA_DIR + f'plots/vel_{k + 1}.png')
+            plt.savefig(os.path.join(velocity_dir, f'vel_{k + 1}.png'))
             plt.close(fig)
 
             # Plot the input
@@ -317,8 +433,57 @@ if __name__ == '__main__':
                 ax.legend()
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
-            plt.savefig(params.DATA_DIR + f'plots/input_{k + 1}.png')
+            plt.savefig(os.path.join(input_dir, f'input_{k + 1}.png'))
             plt.close(fig)
+
+            # Plot 3D positions
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            sc = ax.scatter(x_traj[k][:, 0], x_traj[k][:, 1], x_traj[k][:, 2], c=colors, cmap='coolwarm', s=10)
+            
+            
+            # Add reference frames every 10th point
+            for i in range(0, len(x_traj[k]), 10):
+                roll, pitch, yaw = x_traj[k][i,3:6]
+                rotation_matrix = Rot.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
+
+                # Define the arrow directions (unit vectors in local frame)
+                arrow_length = 0.01  # Length of the arrows
+                x_arrow = rotation_matrix[:, 0] * arrow_length
+                y_arrow = rotation_matrix[:, 1] * arrow_length
+                z_arrow = rotation_matrix[:, 2] * arrow_length
+
+                # Plot the arrows
+                ax.quiver(
+                    x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],  # Arrow origin
+                    x_arrow[0], x_arrow[1], x_arrow[2], color='b', label='X-axis' if i == 0 else ""
+                )
+                ax.quiver(
+                    x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
+                    y_arrow[0], y_arrow[1], y_arrow[2], color='r', label='Y-axis' if i == 0 else ""
+                )
+                ax.quiver(
+                    x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
+                    z_arrow[0], z_arrow[1], z_arrow[2], color='g', label='Z-axis' if i == 0 else ""
+                )
+                        
+            ax.set_xlabel('X [m]')
+            ax.set_ylabel('Y [m]')
+            ax.set_zlabel('Z [m]')
+            # ax.set_xlim(traj_xlim_min[0], traj_xlim_max[0])
+            # ax.set_ylim(traj_xlim_min[1], traj_xlim_max[1])
+            # ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
+            ax.set_title(f'3D Position Trajectory {k + 1}')
+            set_axes_equal(ax)
+            
+            # Add a colorbar
+            # plt.colorbar(sc, ax=ax, label='Time progression')
+
+            # Save the figure
+            plt.tight_layout()
+            plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
+            plt.close(fig)
+
 
     # histogram of status
     # plt.figure()
