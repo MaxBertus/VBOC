@@ -18,7 +18,7 @@ class Model:
         self.ct = params.ct
         self.r = self.cf / self.ct * self.l
         self.g = 9.81
-        self.u_bar = params.u_bar
+        self.u_bar = params.u_bar 
         self.alpha_tilt = params.alpha_tilt
         self.min_width = params.min_width
         self.min_length = params.min_length
@@ -64,6 +64,7 @@ class Model:
         # F and M matrices
         sin_a = np.sin(self.alpha_tilt)
         cos_a = np.cos(self.alpha_tilt)
+        tan_a = np.tan(self.alpha_tilt)
 
         self.F = self.cf * np.array([
         [0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a, 0, np.sqrt(3)/2 * sin_a, -np.sqrt(3)/2 * sin_a],
@@ -102,9 +103,18 @@ class Model:
         self.u_min = np.zeros((nu,))
 
         # Orientation
-        ri = min(abs(-self.mass*self.g/2 * np.tan(self.alpha_tilt)), abs(3*self.cf*self.u_bar*sin_a -self.mass*self.g/2 * np.tan(self.alpha_tilt)))   
-            # supposed to be in case B otherwise ri = abs(-self.mass*self.g/2 * np.tan(self.alpha_tilt))
+        if self.u_bar >= (self.mass*self.g)/(2*self.cf*cos_a):
+            ri = abs(-self.mass*self.g/2 * tan_a)
+            ro = self.mass*self.g * tan_a
+        elif (self.mass*self.g)/(4*self.cf*cos_a) <= self.u_bar < (self.mass*self.g)/(2*self.cf*cos_a):
+            ri = min(abs(-self.mass*self.g/2 * tan_a), abs(3*self.cf*self.u_bar*sin_a -self.mass*self.g/2 * tan_a))   
+            ro = np.linalg.norm(np.array([np.sqrt(3)*self.cf*self.u_bar*sin_a, self.mass*self.g * tan_a - 3*self.cf*self.u_bar*sin_a]))
+        else:
+            ri = 3*self.cf*self.u_bar*sin_a - self.mass*self.g/2 * tan_a
+            ro = self.mass * self.g * tan_a - 6* self.cf * self.u_bar * sin_a
+
         self.phi_hovering = np.arctan2(ri, self.mass * self.g) # max inclination allowed for hovering
+        self.phi_hovering_max = np.arctan2(ro, self.mass * self.g) # max inclination allowed for hovering 
         self.phi_max = np.arccos((self.mass*self.g)/(self.cf * 6 * np.cos(self.alpha_tilt)*self.u_bar))
 
         # Position

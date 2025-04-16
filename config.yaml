@@ -1,10 +1,10 @@
 # Solver Parameters
-prob_num: 100          # number of OCP to create dataset
+prob_num: 10          # number of OCP to create dataset
 n_steps: 200              # number of time steps in each test
 cpu_num: 26
 
-N: 45                     # horizon in seconds
-dt: 5e-3                  # time step
+N: 100                     # horizon in seconds
+dt: 10e-3                  # time step
 #alpha: 15                  # safety margin 
 
 solver_mode: 'BALANCE'    # HPIPM mode, can be --> 'BALANCE', 'ROBUST', 'SPEED', 'SPEED_ABS'

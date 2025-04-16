@@ -21,11 +21,12 @@ def computeDataOnBorder(q, N_guess, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
 
     # Randomize the initial state
-    d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
+    # d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
+    d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
-    u_guess = np.zeros((N_guess, model.nu))
+    u_guess = np.zeros((N_guess, model.nu)) # TODO: Try to impose such that gravity is compensated 
     x_guess[:, :nq] = np.full((N_guess, nq), q)
 
     d /= np.linalg.norm(d)
@@ -238,7 +239,7 @@ if __name__ == '__main__':
     if not os.path.exists(params.NN_DIR):
         os.makedirs(params.NN_DIR)
 
-    N = 100
+    N = 1000
     N_increment = 1
     horizon = args['horizon']
     try:
@@ -247,9 +248,9 @@ if __name__ == '__main__':
     except ValueError:
         print('\nThe horizon must be greater than 0!\n')
         exit()
-    if horizon < N:
-        N = horizon
-        N_increment = 0   
+    # if horizon < N:
+    #     N = horizon
+    #     N_increment = 0   
 
     nls = {
         'relu': torch.nn.ReLU(),
@@ -307,35 +308,40 @@ if __name__ == '__main__':
         exit()
 
     x_data = np.vstack([i for i in x_data_temp if i is not None])
-    x_traj = np.asarray([i for i in x_t if i is not None])
-    u_traj = np.asarray([i for i in u_t if i is not None])
-    b_min = np.asarray([i for i in b_m if i is not None])
-    b_max = np.asarray([i for i in b_M if i is not None])
+    # x_traj = np.asarray([i for i in x_t if i is not None])
+    # u_traj = np.asarray([i for i in u_t if i is not None])
+    # b_min = np.asarray([i for i in b_m if i is not None])
+    # b_max = np.asarray([i for i in b_M if i is not None])
+
+    x_traj = [i for i in x_t if i is not None]
+    u_traj = [i for i in u_t if i is not None]
+    b_min = [i for i in b_m if i is not None]
+    b_max = [i for i in b_M if i is not None]
 
     solved = len(x_data)
     print('Perc solved/numb of problems: %.2f' % (solved / params.prob_num * 100))
     print('Total number of points: %d' % len(x_data))
-    np.save(f'{params.DATA_DIR}_vboc', x_data)
-    np.save(f'{params.DATA_DIR}_trajx', x_traj)
+    # np.save(f'{params.DATA_DIR}_vboc', x_data)
+    # np.save(f'{params.DATA_DIR}_trajx', x_traj)
 
     # PLOT THE SOLUTIONS
     if params.plot_solutions:
 
         # Labels and titles
         pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
-        extended_pose_title = ['Position', 'Orientation']
+        extended_pose_title = ['Position', 'Orientation', 'Inclination']
         velocities_title = ['Linear velocity', 'Angular velocity']
-        pose_label = ['x [m]', 'y [m]', 'z [m]', '$\phi$ [rad]', '\u03B8 [rad]', '$\gamma$ [rad]']
-        pose_legend = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
+        pose_label = ['x [m]', 'y [m]', 'z [m]', 'r [rad]', 'p [rad]', 'y [rad]']
+        pose_legend = ['x', 'y', 'z', 'r', 'p', 'y']
         vel_label = ['v$_x$ [m/s]', 'v$_y$ [m/s]', 'v$_z$ [m/s]', '$\omega_x$ [rad/s]', '$\omega_y$ [rad/s]', '$\omega_z$ [rad/s]']
         vel_legend = ['v$_x$', 'v$_y$', 'v$_z$', '$\omega_x$', '$\omega_y$', '$\omega_z$']
-        y_lab_pose = ['Pos. [m]', 'Orient. [rad]']
+        y_lab_pose = ['Pos. [m]', 'Orient. [rad]', 'Incl. [rad]']
         y_lab_vel = ['v [m/s]', '$\omega$ [rad/s]']
 
         # Define the color map
-        colors = np.linspace(0, 1, horizon)
-        t = np.linspace(0, horizon * params.dt, horizon)
-
+        # colors = np.linspace(0, 1, horizon)
+        # t = np.linspace(0, horizon * params.dt, horizon)
+        
         # Clear the plots directory and create subfolders
         plots_dir = os.path.join(params.DATA_DIR, 'plots')
         traj_dir = os.path.join(plots_dir, 'trajectories')
@@ -364,8 +370,12 @@ if __name__ == '__main__':
         # Start plotting 
         for k in range(len(x_traj)):
 
-            traj_xlim_min = b_min[k].tolist() + [-np.pi/2, -np.pi/2, -np.pi]
-            traj_xlim_max = b_max[k].tolist() + [np.pi/2, np.pi/2, np.pi]
+            horizon_ = x_traj[k].shape[0]
+            colors = np.linspace(0, 1, horizon_)
+            t = np.linspace(0, horizon_ * params.dt, horizon_)
+
+            traj_xlim_min = b_min[k].tolist() + [-max_phi, -max_phi, -np.pi]
+            traj_xlim_max = b_max[k].tolist() + [max_phi, max_phi, np.pi]
 
             # Plot the trajectory
             fig, ax = plt.subplots(2, 3)
@@ -382,7 +392,7 @@ if __name__ == '__main__':
             plt.close(fig)
 
             # Plot pose
-            fig, ax = plt.subplots(2, 1)
+            fig, ax = plt.subplots(3, 1)
             ax = ax.reshape(-1)
             j = 0
             for i in range(nq):
@@ -396,6 +406,17 @@ if __name__ == '__main__':
                 ax[j].set_xlabel('Time [s]')
                 ax[j].set_ylabel(y_lab_pose[j])
                 ax[j].legend()
+            j += 1
+            ax[j].grid(True)
+            ax[j].set_title(f'{extended_pose_title[j]}')
+            line, = ax[j].plot(t, np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4])), label=f'{pose_label[i]}')
+            ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
+            ax[j].axhline(max_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
+            ax[j].axhline(model.phi_hovering_max, color='r', linestyle='--', linewidth=0.8)
+            ax[j].set_xlabel('Time [s]')
+            ax[j].set_ylabel(y_lab_pose[j])
+            ax[j].legend()
+
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
             plt.savefig(os.path.join(pose_dir, f'pose_{k + 1}.png'))
@@ -475,7 +496,7 @@ if __name__ == '__main__':
             # ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
             ax.set_title(f'3D Position Trajectory {k + 1}')
             set_axes_equal(ax)
-            
+
             # Add a colorbar
             # plt.colorbar(sc, ax=ax, label='Time progression')
 

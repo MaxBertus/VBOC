@@ -69,7 +69,7 @@ class Parameters:
         self.cf = float(parameters['cf'])
         self.ct = float(parameters['ct'])
         self.u_bar = float(parameters['max_w'])**2
-        self.alpha_tilt = (float(parameters['alpha_tilt']))
+        self.alpha_tilt = np.deg2rad((float(parameters['alpha_tilt'])))
 
         self.min_width = float(parameters['min_width'])
         self.min_length = float(parameters['min_length'])
