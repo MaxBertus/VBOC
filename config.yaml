@@ -4,8 +4,9 @@ n_steps: 200              # number of time steps in each test
 cpu_num: 26
 
 N: 100                     # horizon in seconds
+N_increment: 0           # increment of the horizon
 dt: 10e-3                  # time step
-#alpha: 15                  # safety margin 
+#alpha: 15                 # safety margin 
 
 solver_mode: 'BALANCE'    # HPIPM mode, can be --> 'BALANCE', 'ROBUST', 'SPEED', 'SPEED_ABS'
 nlp_max_iter: 1000

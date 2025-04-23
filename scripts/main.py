@@ -17,41 +17,42 @@ from scipy.spatial.transform import Rotation as Rot
 import shutil
 from mpl_toolkits.mplot3d import Axes3D
 
-def computeDataOnBorder(q, N_guess, box_min_values, box_max_values):
+def computeDataOnBorder(q_init, N_guess, N_increment, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
 
     # Randomize the initial state
     # d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
-    d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
+    # d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
+    d = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
-    u_guess = np.zeros((N_guess, model.nu)) # TODO: Try to impose such that gravity is compensated 
-    x_guess[:, :nq] = np.full((N_guess, nq), q)
+    u_guess = np.zeros((N_guess, model.nu))  # TODO: Try to impose such that gravity is compensated 
+    x_guess[:, :model.nq] = np.full((N_guess, model.nq), q_init)
 
     d /= np.linalg.norm(d)
     controller.setGuess(x_guess, u_guess)
 
     # Solve the OCP
-    x_star, u_star, _, status = controller.solveVBOC(q, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=3)
+    x_star, u_star, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=3)
     if x_star is None:
         return None, None, None, box_min_values, box_max_values, status, 
     else:
         return x_star[0], x_star, u_star, box_min_values, box_max_values, status
     
-def fixedVelocityDir(N_guess, n_pts=100):   # NOTE: to verify
+def fixedVelocityDir(N_guess, N_increment, n_pts=100 ):   # NOTE: to verify
     """ Compute data on section of the viability kernel"""
     sec_pts = []
     status_list = []
     controller.resetHorizon(N_guess)
-    for i in range(nq):
+    for i in range(model.nq):
         # print('#### DOF n %d ####' % i)
         q_grid = np.linspace(model.x_min[i], model.x_max[i], n_pts)
         q_grid = np.tile(q_grid, 2)
         x_sec = np.empty((0, model.nx)) * np.nan 
         status_vec = np.empty(n_pts * 2) * np.nan
         for j in range(n_pts * 2):
-            q_try = (model.x_max[:nq] + model.x_min[:nq]) / 2
+            q_try = (model.x_max[:model.nq] + model.x_min[:model.nq]) / 2
             q_try[i] = q_grid[j]
             x_try = np.hstack([q_try, np.zeros(nq)])
             
@@ -60,7 +61,7 @@ def fixedVelocityDir(N_guess, n_pts=100):   # NOTE: to verify
             # x_init = np.vstack([x_init, x_try])
             x_guess = np.zeros((N_guess, model.nx))
             u_guess = np.zeros((N_guess, model.nu))
-            x_guess[:, :nq] = np.full((N_guess, nq), q_try)
+            x_guess[:, :model.nq] = np.full((N_guess, model.nq), q_try)
 
             d = np.zeros(model.nv)
             d[i] = 1 if j < n_pts else -1
@@ -207,9 +208,8 @@ class CustomLoss(torch.nn.Module):  # NOTE: to verify
         l2 = torch.mean((y_pred - y_true) ** 2)
         l1_over = torch.mean(torch.relu(y_pred - y_true))
         return self.alpha * l2 + self.beta * l1_over 
-
-if __name__ == '__main__':
     
+def main():
     start_time = time.time()
 
     ### PARSE ARGUMENTS OF COMMAND LINE 
@@ -228,6 +228,7 @@ if __name__ == '__main__':
 
     ### DEFINE THE MODEL
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    global model, controller
     model = Model(params)
     controller = ViabilityController(model)
     nq = model.nq
@@ -299,7 +300,7 @@ if __name__ == '__main__':
         # inputs --> (initial random configuration, horizon)
         # res = p.starmap(computeDataOnBorder, [(q0, N) for q0 in q_init])
 
-        res = p.starmap(computeDataOnBorder, [(q0, N, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
+        res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
 
     x_data_temp, x_t, u_t, b_m, b_M, status = zip(*res)
 
@@ -621,3 +622,6 @@ if __name__ == '__main__':
     minutes = int((elapsed_time % 3600) // 60)
     seconds = int(elapsed_time % 60)
     print(f'Elapsed time: {hours}:{minutes:2d}:{seconds:2d}')
+
+if __name__ == '__main__':
+    main()
