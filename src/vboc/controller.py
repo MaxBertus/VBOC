@@ -17,6 +17,8 @@ class ViabilityController(AbstractController):
             if i != 0:
                 self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
                 self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
+                self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
+                self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
                 # print("lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
                 # print("ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1]) # NOTE: why?
@@ -42,6 +44,24 @@ class ViabilityController(AbstractController):
         # Solve the OCP
         return self.ocp_solver.solve()
     
+    # def solveVBOC(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
+    #     N = N_start
+    #     gamma = 0
+    #     x_sol, u_sol = None, None
+
+    #     status = self.solve(q_init, d, box_min_values, box_max_values)
+
+    #     if status == 0:
+    #         x_sol = np.empty((N + n, self.model.nx))
+    #         u_sol = np.empty((N + n, self.model.nu))    # last control is not used
+    #         for i in range(N):
+    #             x_sol[i] = self.ocp_solver.get(i, 'x')
+    #             u_sol[i] = self.ocp_solver.get(i, 'u')
+    #         x_sol[N:] = self.ocp_solver.get(N, 'x')
+    #         u_sol[N:] = np.zeros((n, self.model.nu))
+
+    #     return x_sol, u_sol, N, status
+        
     def solveVBOC(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
         N = N_start
         gamma = 0
@@ -49,7 +69,8 @@ class ViabilityController(AbstractController):
         # if n == 0:
         #     # N-BRS --> constant horizon N, no need to repeat the process until convergence 
         #     repeat = 1
-        for _ in range(repeat):
+        for r in range(repeat):
+            
             # Solve the OCP
             status = self.solve(q_init, d, box_min_values, box_max_values)
 
@@ -57,6 +78,9 @@ class ViabilityController(AbstractController):
                 # Compare the current cost with the previous one:
                 x0 = self.ocp_solver.get(0, "x")
                 gamma_new = np.linalg.norm(x0[self.model.nq:])
+                gamma_new = -d @ x0[self.model.nq:]
+
+                print(f"Iteration {r}: gamma = {gamma_new:.4f}, diff = {gamma_new - gamma:.4f}, status = {status}")
 
                 if gamma_new < gamma + self.tol and status == 0:
                     break

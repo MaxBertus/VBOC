@@ -10,7 +10,7 @@ def parse_args():
                         help='Systems to test. Available: sth (Star-shaped Tilted Hexarotor)')
     parser.add_argument('-b', '--build', action='store_true',
                         help='Build the code of the embedded controller')
-    parser.add_argument('--horizon', type=int, default=45,
+    parser.add_argument('--horizon', type=int, default=None,
                         help='Horizon of the optimal control problem')
     parser.add_argument('-t', '--training', action='store_true',
                         help='Train the neural network model that approximates the viability kernel')
@@ -40,6 +40,7 @@ class Parameters:
         # self.build = False
         
         self.N = int(parameters['N'])
+        self.N_increment = int(parameters['N_increment'])
         self.dt = float(parameters['dt'])
         #self.alpha = int(parameters['alpha'])
 
@@ -53,6 +54,7 @@ class Parameters:
 
         self.state_tol = float(parameters['state_tol'])
         self.cost_tol = float(parameters['cost_tol'])
+        self.vboc_repeat = int(parameters['vboc_repeat'])
         self.globalization = 'MERIT_BACKTRACKING'
 
         self.learning_rate = float(parameters['learning_rate'])

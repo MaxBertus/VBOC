@@ -1,6 +1,6 @@
 import re
 import numpy as np
-from casadi import MX, DM, horzcat, vertcat, dot, Function, sin, cos, tan, cross
+from casadi import MX, DM, horzcat, vertcat, dot, Function, sin, cos, tan, cross, fabs, sqrt
 from urdf_parser_py.urdf import URDF
 import adam
 from adam.casadi import KinDynComputations
@@ -93,9 +93,12 @@ class Model:
         self.f_expl = vertcat(
             self.x[nq:nq+npos],
             self.Tinv(self.x)@self.x[nq+npos:],
-            -self.g*np.array([0, 0, 1]) + self.fc(self.x, self.u)/self.mass, 
+            -self.g*np.array([[0], [0], [1]]) + self.fc(self.x, self.u)/self.mass, 
             np.linalg.inv(self.J) @ (cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
         )
+
+        # explicit dynamics function
+        self.f_expl_func = Function('f_expl', [self.x, self.u], [self.f_expl])
 
         # BOUNDS
         # Input 
@@ -168,7 +171,7 @@ class AbstractController:
         # COST
         # Maximize initial velocity
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
+        self.ocp.model.cost_expr_ext_cost_0 =  dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
         self.ocp.parameter_values = np.zeros(self.model.nv)
 
         # CONSTRAINTS
@@ -187,6 +190,12 @@ class AbstractController:
         self.ocp.constraints.ubx_e = np.full(self.model.nx, 1e4)  
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
 
+        # self.ocp.model.con_h_expr_e = vertcat(sqrt(self.model.x[self.model.npos]**2 + self.model.x[self.model.npos + 1]**2))
+
+        # self.ocp.constraints.lh_e = np.array([0.0])
+        # self.ocp.constraints.uh_e = np.array([self.model.phi_hovering_max])
+
+
         self.ocp.constraints.C = np.zeros((self.model.nv, self.model.nx))
         self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
         self.ocp.constraints.lg = np.zeros((self.model.nv,))
@@ -199,7 +208,7 @@ class AbstractController:
 
         # SOLVER OPTIONS
         self.ocp.solver_options.integrator_type = "ERK"
-        self.ocp.solver_options.hessian_approx = "EXACT"
+        self.ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
         self.ocp.solver_options.exact_hess_constr = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.nlp_solver_type = self.params.solver_type
@@ -207,9 +216,12 @@ class AbstractController:
         self.ocp.solver_options.nlp_solver_max_iter = self.params.nlp_max_iter
         self.ocp.solver_options.qp_solver_iter_max = self.params.qp_max_iter
         self.ocp.solver_options.globalization = self.params.globalization
-        self.ocp.solver_options.alpha_reduction = self.params.alpha_reduction
-        self.ocp.solver_options.alpha_min = self.params.alpha_min
+        self.ocp.solver_options.globalization_alpha_reduction = self.params.alpha_reduction
+        self.ocp.solver_options.globalization_alpha_min = self.params.alpha_min
         self.ocp.solver_options.levenberg_marquardt = self.params.levenberg_marquardt
+
+        # Debug
+        self.ocp.solver_options.print_level = 1
 
         # Generate OCP solver
         gen_name = self.params.GEN_DIR + 'ocp_' + self.ocp_name + '_' + self.model.amodel.name

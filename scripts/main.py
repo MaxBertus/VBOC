@@ -17,24 +17,27 @@ from scipy.spatial.transform import Rotation as Rot
 import shutil
 from mpl_toolkits.mplot3d import Axes3D
 
-def computeDataOnBorder(q_init, N_guess, N_increment, box_min_values, box_max_values):
+def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
 
     # Randomize the initial state
     # d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
     # d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
-    d = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
+    d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
-    u_guess = np.zeros((N_guess, model.nu))  # TODO: Try to impose such that gravity is compensated 
+    #u_guess = np.zeros((N_guess, model.nu))  # TODO: Try to impose such that gravity is compensated 
+    u_guess = np.linalg.pinv(model.R(np.hstack((q_init, np.zeros(model.nx-model.nq)))).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
+    u_guess = np.full((N_guess, model.nu), u_guess)
+
     x_guess[:, :model.nq] = np.full((N_guess, model.nq), q_init)
 
     d /= np.linalg.norm(d)
     controller.setGuess(x_guess, u_guess)
 
     # Solve the OCP
-    x_star, u_star, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=3)
+    x_star, u_star, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=vboc_repeat)
     if x_star is None:
         return None, None, None, box_min_values, box_max_values, status, 
     else:
@@ -212,9 +215,8 @@ class CustomLoss(torch.nn.Module):  # NOTE: to verify
 def main():
     start_time = time.time()
 
-    ### PARSE ARGUMENTS OF COMMAND LINE 
+    ### PARSE ARGUMENTS
     args = parse_args()
-    # Define the available systems
     available_systems = ['sth']
     try:
         if args['system'] not in available_systems:
@@ -226,7 +228,7 @@ def main():
     params.build = args['build']
     act = args['activation']
 
-    ### DEFINE THE MODEL
+    ### MODEL AND CONTROLLER DEFINITION
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     global model, controller
     model = Model(params)
@@ -234,24 +236,25 @@ def main():
     nq = model.nq
     nu = model.nu
 
-    # Check if data and nn folders exist, if not create it
     if not os.path.exists(params.DATA_DIR):
         os.makedirs(params.DATA_DIR)
     if not os.path.exists(params.NN_DIR):
         os.makedirs(params.NN_DIR)
 
-    N = 1000
-    N_increment = 1
+    N = params.N
+    N_increment = params.N_increment
+    vboc_repeat = params.vboc_repeat
     horizon = args['horizon']
-    try:
-        if horizon < 1:
-            raise ValueError
-    except ValueError:
-        print('\nThe horizon must be greater than 0!\n')
-        exit()
-    # if horizon < N:
-    #     N = horizon
-    #     N_increment = 0   
+
+    if horizon is not None:
+        try:
+            if horizon < 1:
+                raise ValueError
+        except ValueError:
+            print('\nThe horizon must be greater than 0!\n')
+            exit()
+        if horizon < N:
+            N = horizon
 
     nls = {
         'relu': torch.nn.ReLU(),
@@ -270,7 +273,7 @@ def main():
         ub = 1
 
     # DATA GENERATION
-    # Generate random initial configurations
+    # Initial position
     pos_init = np.zeros((params.prob_num, model.npos))
 
     # Initial orientation 
@@ -282,8 +285,8 @@ def main():
         max_phi = np.pi/2 
 
     roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
-    orient_init = np.column_stack([roll, pitch, yaw])
-    # orient_init = np.zeros((params.prob_num, model.nori))
+    #orient_init = np.column_stack([roll, pitch, yaw])
+    orient_init = np.zeros((params.prob_num, model.nori))
 
     q_init = np.hstack([pos_init, orient_init])
 
@@ -291,21 +294,24 @@ def main():
     # box_min_values = np.array([np.random.uniform(model.box_occupancy[:3], model.env_dimensions[:3]) for _ in range(params.prob_num)])
     # box_max_values = np.array([np.random.uniform(model.box_occupancy[3:], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
-    box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-    box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
+    # box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
+    # box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
+    box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
+    box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
 
     print('Start data generation')
     with Pool(params.cpu_num) as p:
         # inputs --> (initial random configuration, horizon)
         # res = p.starmap(computeDataOnBorder, [(q0, N) for q0 in q_init])
 
-        res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
+        res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
 
     x_data_temp, x_t, u_t, b_m, b_M, status = zip(*res)
 
     if all(item is None for item in x_data_temp):
         print('No solution found for any problem')
+        print(status)
         exit()
 
     x_data = np.vstack([i for i in x_data_temp if i is not None])
@@ -339,10 +345,6 @@ def main():
         y_lab_pose = ['Pos. [m]', 'Orient. [rad]', 'Incl. [rad]']
         y_lab_vel = ['v [m/s]', '$\omega$ [rad/s]']
 
-        # Define the color map
-        # colors = np.linspace(0, 1, horizon)
-        # t = np.linspace(0, horizon * params.dt, horizon)
-        
         # Clear the plots directory and create subfolders
         plots_dir = os.path.join(params.DATA_DIR, 'plots')
         traj_dir = os.path.join(plots_dir, 'trajectories')
@@ -506,7 +508,9 @@ def main():
             plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
             plt.close(fig)
 
-
+            # Print the explicit dynamics for the last step
+            print(f'Explicit dynamics of trajectory {k + 1}:\n {model.f_expl_func(x_traj[k][-1, :], u_traj[k][-1, :]).full()}')
+    
     # histogram of status
     # plt.figure()
     # plt.hist(status, bins=[0, 1, 2, 3, 4, 5], edgecolor='black', align='left', rwidth=0.8)
@@ -622,6 +626,8 @@ def main():
     minutes = int((elapsed_time % 3600) // 60)
     seconds = int(elapsed_time % 60)
     print(f'Elapsed time: {hours}:{minutes:2d}:{seconds:2d}')
+
+    
 
 if __name__ == '__main__':
     main()

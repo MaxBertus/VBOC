@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 @dataclass
 class Params:
-    p: np.ndarray
     N: int
     n: int
     dt: float
@@ -17,7 +16,7 @@ class Params:
     nx: int
 
 # Define the OCP problem
-def setup_ocp():
+def setup_ocp(params):
     # Define dimensions
     nq = params.nq  # Number of position states
     nv = params.nv  # Number of velocity states
@@ -27,7 +26,7 @@ def setup_ocp():
     # Define symbolic variables
     x = MX.sym("x", nx)  # State: [position, velocity]
     u = MX.sym("u", nu)  # Control input
-    # p = MX.sym("p", nq)  # Parameters
+    p = MX.sym("p", nq)  # Parameters
 
     # Define dynamics
     A = np.vstack((
@@ -46,7 +45,7 @@ def setup_ocp():
     model.name = "minimal_ocp"
     model.x = x
     model.u = u
-    # model.p = p
+    model.p = p
     model.f_expl_expr = f_expl
 
     # Create Acados OCP
@@ -58,9 +57,10 @@ def setup_ocp():
     ocp.dims.N = params.N  # Number of shooting nodes
 
     # Define cost function
-    cost_expr = -dot(params.p, x[nq:])  # Maximize initial velocity
+    cost_expr = -dot(p, x[nq:])  # Maximize initial velocity
     ocp.cost.cost_type_0 = "EXTERNAL"
     ocp.model.cost_expr_ext_cost_0 = cost_expr
+    ocp.parameter_values = np.zeros(nv)
 
 
     # Define constraints
@@ -99,12 +99,9 @@ def setup_ocp():
     return ocp
 
 # Solve the OCP
-def solve_ocp():
-    ocp = setup_ocp()
+def solve_ocp(params):
+    ocp = setup_ocp(params)
     ocp_solver = AcadosOcpSolver(ocp, json_file="minimal_ocp.json")
-    C = np.zeros((params.nv, params.nx))
-    C[:, params.nq:] = np.eye(params.nv)- params.p[:,None] @ params.p[None,:]
-    ocp_solver.constraints_set(0, "C", C, api='new')
 
     nq = params.nq  # Number of position states
     nv = params.nv  # Number of velocity states
@@ -115,20 +112,35 @@ def solve_ocp():
     # Set initial guess
     x_guess = np.zeros((ocp.dims.N, ocp.model.x.size()[0]))
     u_guess = np.zeros((ocp.dims.N, ocp.model.u.size()[0]))
-    for i in range(ocp.dims.N):
-        ocp_solver.set(i, "x", x_guess[i])
-        ocp_solver.set(i, "u", u_guess[i])
 
     # Set parameter values
-    # p_values = np.array([1.0, 0.0, 0.0])  # Example parameter values
-    # for i in range(ocp.dims.N + 1):  # Set for all shooting nodes (N + 1 includes terminal node)
-    #     ocp_solver.set(i, "p", p_values)
+    p_values = np.array([0.0, 1.0, 0.0])  # Example parameter values
+    p_values /= np.linalg.norm(p_values)  # Normalize the parameter vector
+    for i in range(ocp.dims.N + 1):  # Set for all shooting nodes (N + 1 includes terminal node)
+        ocp_solver.set(i, "p", p_values)
+
+    C = np.zeros((params.nv, params.nx))
+    C[:, params.nq:] = np.eye(params.nv)- p_values[:,None] @ p_values[None,:]
+    ocp_solver.constraints_set(0, "C", C, api='new')
+
 
     # Solve the problem
     
     gamma = 0
 
     while True:
+
+        ocp_solver.reset()
+        for i in range(ocp.dims.N):
+            ocp_solver.set(i, "x", x_guess[i])
+            ocp_solver.set(i, "u", u_guess[i])
+
+        p_values = np.array([0.0, 1.0, 0.0])  # Example parameter values
+        p_values /= np.linalg.norm(p_values)  # Normalize the parameter vector
+        for i in range(ocp.dims.N + 1):  # Set for all shooting nodes (N + 1 includes terminal node)
+            ocp_solver.set(i, "p", p_values)
+
+        
         status = ocp_solver.solve()
 
         if status == 0:
@@ -140,14 +152,13 @@ def solve_ocp():
                 states.append(ocp_solver.get(i, "x"))
                 inputs.append(ocp_solver.get(i, "u"))
             states.append(ocp_solver.get(ocp.dims.N, "x"))  # Terminal state
+            inputs.append(np.zeros((nu,)))
             states = np.array(states, dtype=float)
             inputs = np.array(inputs, dtype=float)
 
-            gamma_new = dot(params.p, states[0][nq:])  # Example cost function evaluation
+            gamma_new = dot(p_values, states[0][nq:])  # Example cost function evaluation
 
             print(f"gamma_new: {gamma_new}, gamma: {gamma }")
-
-            print(gamma_new <= gamma)
 
             if gamma_new <= gamma  or params.rollout == 0:
                 print("OCP solved successfully with N:", ocp.dims.N)
@@ -178,7 +189,7 @@ def solve_ocp():
 
                 # Plot the control inputs
                 for input_idx in range(nu): # Control inputs
-                    axs[2].plot(time[:-1], inputs[:, input_idx], label=f"Control Input {input_idx}")   
+                    axs[2].plot(time, inputs[:, input_idx], label=f"Control Input {input_idx}")   
                 axs[2].set_xlabel("Time [s]")
                 axs[2].set_ylabel("Control Input Values")
                 axs[2].set_title("Control Inputs Over Time")
@@ -194,6 +205,8 @@ def solve_ocp():
 
             else:
                 gamma = gamma_new
+                x_guess = states
+                u_guess = inputs
                 # Rollout the solution
                 ocp.dims.N += params.n
                 ocp_solver.set_new_time_steps(np.full(ocp.dims.N, params.dt))
@@ -202,13 +215,8 @@ def solve_ocp():
         else:
             print(f"OCP solver failed with status {status}")
 
-if __name__ == "__main__":
-
-    p = np.array([1.0, 1.0, 0.0])
-    p /= np.linalg.norm(p)
-
-    params = Params(
-        p=p,
+def main():
+    parameters = Params(
         N=10,
         n=1,
         dt=5e-3,
@@ -219,4 +227,8 @@ if __name__ == "__main__":
         nx=3+3
     )
     
-    solve_ocp()
+    solve_ocp(parameters)
+
+if __name__ == "__main__":
+    main()
+
