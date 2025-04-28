@@ -16,18 +16,20 @@ from vboc.learning import NeuralNetwork, RegressionNN, plot_brs
 from scipy.spatial.transform import Rotation as Rot
 import shutil
 from mpl_toolkits.mplot3d import Axes3D
+from rich.traceback import install
+install()
 
 def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
 
     # Randomize the initial state
-    # d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
+    d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
     # d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
-    d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
+    # d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
-    #u_guess = np.zeros((N_guess, model.nu))  # TODO: Try to impose such that gravity is compensated 
+    #u_guess = np.zeros((N_guess, model.nu))  # NOTE: without gravity compensation
     u_guess = np.linalg.pinv(model.R(np.hstack((q_init, np.zeros(model.nx-model.nq)))).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
     u_guess = np.full((N_guess, model.nu), u_guess)
 
@@ -119,7 +121,7 @@ def generate_constrained_rpy(min_inclination, max_inclination, n_samples):
 
     count = 0
     tries = 0
-    max_tries = max(n_samples * 100, 10000)
+    max_tries = max(n_samples * 1000, 10000)
 
     while count < n_samples and tries < max_tries:
         tries += 1
@@ -142,7 +144,7 @@ def generate_constrained_rpy(min_inclination, max_inclination, n_samples):
             count += 1
 
     if count < n_samples:
-        print(f"Warning: Maximum tries ({max_tries}) exceeded. Found {count}/{n_samples} samples.")
+        raise RuntimeError(f"Error: Maximum tries ({max_tries}) exceeded. Found {count}/{n_samples} samples.")
 
     return (
         np.array(roll_list),
@@ -285,20 +287,20 @@ def main():
         max_phi = np.pi/2 
 
     roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
-    #orient_init = np.column_stack([roll, pitch, yaw])
-    orient_init = np.zeros((params.prob_num, model.nori))
+    orient_init = np.column_stack([roll, pitch, yaw])
+    # orient_init = np.zeros((params.prob_num, model.nori)) # NOTE: non-random orientation
 
     q_init = np.hstack([pos_init, orient_init])
 
-    # Generate random box
-    # box_min_values = np.array([np.random.uniform(model.box_occupancy[:3], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-    # box_max_values = np.array([np.random.uniform(model.box_occupancy[3:], model.env_dimensions[3:]) for _ in range(params.prob_num)])
+    # Obstacles box
+    box_min_values = np.array([np.random.uniform(model.box_occupancy[:3], model.env_dimensions[:3]) for _ in range(params.prob_num)])
+    box_max_values = np.array([np.random.uniform(model.box_occupancy[3:], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
-    # box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-    # box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
+    box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
+    box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
-    box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
-    box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
+    # box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
+    # box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
 
     print('Start data generation')
     with Pool(params.cpu_num) as p:
@@ -509,7 +511,7 @@ def main():
             plt.close(fig)
 
             # Print the explicit dynamics for the last step
-            print(f'Explicit dynamics of trajectory {k + 1}:\n {model.f_expl_func(x_traj[k][-1, :], u_traj[k][-1, :]).full()}')
+            # print(f'Explicit dynamics of trajectory {k + 1}:\n {model.f_expl_func(x_traj[k][-1, :], u_traj[k][-1, :]).full()}')
     
     # histogram of status
     # plt.figure()
@@ -523,7 +525,7 @@ def main():
     # TRAINING
     if args['training']: # NOTE: to verify
         # Load the data
-        x_data = np.load(f'{params.DATA_DIR}{nq}dof_vboc.npy')
+        x_data = np.load(f'{params.DATA_DIR}_vboc.npy')
         np.random.shuffle(x_data)
         
         nn_model = NeuralNetwork(model.nx, 256, 1, act_fun, ub).to(device)

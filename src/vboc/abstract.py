@@ -221,7 +221,7 @@ class AbstractController:
         self.ocp.solver_options.levenberg_marquardt = self.params.levenberg_marquardt
 
         # Debug
-        self.ocp.solver_options.print_level = 1
+        self.ocp.solver_options.print_level = 0
 
         # Generate OCP solver
         gen_name = self.params.GEN_DIR + 'ocp_' + self.ocp_name + '_' + self.model.amodel.name
