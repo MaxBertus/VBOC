@@ -80,7 +80,7 @@ class ViabilityController(AbstractController):
                 gamma_new = np.linalg.norm(x0[self.model.nq:])
                 gamma_new = -d @ x0[self.model.nq:]
 
-                print(f"Iteration {r}: gamma = {gamma_new:.4f}, diff = {gamma_new - gamma:.4f}, status = {status}")
+                # print(f"Iteration {r}: gamma = {gamma_new:.4f}, diff = {gamma_new - gamma:.4f}, status = {status}")
 
                 if gamma_new < gamma + self.tol and status == 0:
                     break

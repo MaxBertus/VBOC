@@ -195,12 +195,11 @@ class AbstractController:
         # self.ocp.constraints.lh_e = np.array([0.0])
         # self.ocp.constraints.uh_e = np.array([self.model.phi_hovering_max])
 
-
         self.ocp.constraints.C = np.zeros((self.model.nv, self.model.nx))
         self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
         self.ocp.constraints.lg = np.zeros((self.model.nv,))
         self.ocp.constraints.ug = np.zeros((self.model.nv,))
-        
+
         # Input constraints
         self.ocp.constraints.lbu = self.model.u_min
         self.ocp.constraints.ubu = self.model.u_max
@@ -208,7 +207,7 @@ class AbstractController:
 
         # SOLVER OPTIONS
         self.ocp.solver_options.integrator_type = "ERK"
-        self.ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
+        self.ocp.solver_options.hessian_approx = "EXACT"
         self.ocp.solver_options.exact_hess_constr = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.nlp_solver_type = self.params.solver_type
