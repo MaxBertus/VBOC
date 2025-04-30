@@ -266,7 +266,8 @@ def main():
         'tanh': torch.nn.Tanh(),
         'sine': Sine(),
         'gelu': torch.nn.GELU(approximate='tanh'),
-        'silu': torch.nn.SiLU()
+        'silu': torch.nn.SiLU(),
+        'sigm': torch.nn.Sigmoid()
     }
     act_fun = nls[act]
     nn_filename = f'{params.NN_DIR}_{act}.pt'
@@ -275,6 +276,7 @@ def main():
         ub = 1
     else:
         ub = 100
+    
 
     # DATA GENERATION
     # Initial position
@@ -583,6 +585,8 @@ def main():
         print(f'RMSE on Training data: {rmse_train:.5f}')
         print(f'Maximum error wrt training data: {torch.max(rel_err).item():.5f}')
 
+        print("TESTSTSTSTSTSTSTS")
+        print("test size", test_size)
         x_test, y_test = x_data[-test_size:], y_data[-test_size:]
         rmse_test, rel_err = regressor.testing(x_test, y_test)
         print(f'RMSE on Test data: {rmse_test:.5f}')

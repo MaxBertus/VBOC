@@ -1,5 +1,5 @@
 # Solver Parameters
-prob_num: 10          # number of OCP to create dataset
+prob_num: 100          # number of OCP to create dataset
 n_steps: 200              # number of time steps in each test
 cpu_num: 26
 
@@ -18,7 +18,7 @@ levenberg_marquardt: 1e-5
 state_tol: 1e-3           # state tolerance
 # conv_tol: 1e-3            # convergence tolerance for the task
 cost_tol: 1e-3            # Tolerance for the cost
-vboc_repeat: 10         # VBOC repetition
+vboc_repeat: 500         # VBOC repetition
 
 # Training Parameters
 learning_rate: 1e-3       # learning rate
