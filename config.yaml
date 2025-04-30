@@ -51,6 +51,3 @@ max_height: 0.5 # min width/2 of the environment [m]
 
 # Data generation
 orient_g_rej: true # select orientation with gravity rejection
-
-# Data visualization
-plot_solutions: true # plot the solutions

@@ -82,5 +82,3 @@ class Parameters:
         self.max_height = float(parameters['max_height'])
 
         self.orient_g_rej = bool(parameters['orient_g_rej'])
-
-        self.plot_solutions = bool(parameters['plot_solutions'])

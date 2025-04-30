@@ -335,11 +335,23 @@ def main():
     print('Perc solved/numb of problems: %.2f' % (solved / params.prob_num * 100))
     print('Total number of points: %d' % len(x_data))
 
+    # PLOT THE SOLUTIONS
+    # Clear the entire data directory
+    if os.path.exists(params.DATA_DIR):
+        for file in os.listdir(params.DATA_DIR):
+            file_path = os.path.join(params.DATA_DIR, file)
+            if os.path.isdir(file_path):
+                shutil.rmtree(file_path)  # Remove directories
+            else:
+                os.remove(file_path)  # Remove files
+    else:
+        os.makedirs(params.DATA_DIR)
+
+
     np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
     np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
 
-    # PLOT THE SOLUTIONS
-    if params.plot_solutions:
+    if args['plot']:
 
         # Labels and titles
         pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
@@ -352,7 +364,7 @@ def main():
         y_lab_pose = ['Pos. [m]', 'Orient. [rad]', 'Incl. [rad]']
         y_lab_vel = ['v [m/s]', '$\omega$ [rad/s]']
 
-        # Clear the plots directory and create subfolders
+        # Recreate the plots directory and its subdirectories
         plots_dir = os.path.join(params.DATA_DIR, 'plots')
         traj_dir = os.path.join(plots_dir, 'trajectories')
         pose_dir = os.path.join(plots_dir, 'poses')
@@ -360,17 +372,7 @@ def main():
         input_dir = os.path.join(plots_dir, 'inputs')
         threeD_dir = os.path.join(plots_dir, '3D')
 
-        if not os.path.exists(plots_dir):
-            os.makedirs(plots_dir)
-        else:
-            for file in os.listdir(plots_dir):
-                file_path = os.path.join(plots_dir, file)
-                if os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  # Remove directories
-                else:
-                    os.remove(file_path)  # Remove files
-
-        # Create subfolders for each type of plot
+        os.makedirs(plots_dir, exist_ok=True)
         os.makedirs(traj_dir, exist_ok=True)
         os.makedirs(pose_dir, exist_ok=True)
         os.makedirs(velocity_dir, exist_ok=True)
@@ -528,7 +530,7 @@ def main():
     # plt.show(block=False)
 
     # TRAINING
-    if args['training']: # NOTE: to verify
+    if args['training']: 
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
