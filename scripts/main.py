@@ -580,18 +580,19 @@ def main():
                                                   train_size, args['epochs'], refine=False)
         print('Training completed\n')
 
-        print('MODEL EVALUATION')
+        print('***MODEL EVALUATION***')
         rmse_train, rel_err = regressor.testing(x_train_val, y_train_val)
         print(f'RMSE on Training data: {rmse_train:.5f}')
         print(f'Maximum error wrt training data: {torch.max(rel_err).item():.5f}')
-
-        print("TESTSTSTSTSTSTSTS")
-        print("test size", test_size)
         x_test, y_test = x_data[-test_size:], y_data[-test_size:]
         rmse_test, rel_err = regressor.testing(x_test, y_test)
+        print('---')
         print(f'RMSE on Test data: {rmse_test:.5f}')
-        print(f'99 % of the data has an error lower than: {torch.quantile(rel_err, 0.99).item():.5f}')
-        print(f'Maximum error wrt test data: {torch.max(rel_err).item():.5f}')
+        print(f'Mean and std of the relative error: {torch.mean(rel_err).item()*100:.2f}% +/- {torch.std(rel_err).item()*100:.2f}%')
+        print(f'99 % of the data has a relative error lower than: {torch.quantile(rel_err, 0.99).item()*100:.2f}%')
+        print(f'Maximum relative error wrt test data: {torch.max(rel_err).item()*100:.2f}%')
+        print(f'Minimum relative error wrt test data: {torch.min(rel_err).item()*100:.2f}%')
+        print('*---*---*---*\n')
 
         # Save the model
         torch.save({'mean': mean, 'std': std, 'model': nn_model.state_dict()}, nn_filename)
