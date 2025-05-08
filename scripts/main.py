@@ -396,6 +396,12 @@ def main():
         os.makedirs(velocity_dir, exist_ok=True)
         os.makedirs(input_dir, exist_ok=True)
         os.makedirs(threeD_dir, exist_ok=True)
+        
+        normals = [
+            np.array([1,0,0]),
+            np.array([0,1,0]),
+            np.array([0,0,1]) 
+        ]
 
         # Start plotting 
         for k in range(len(x_traj)):
@@ -431,6 +437,13 @@ def main():
                 ax[j].grid(True)
                 ax[j].set_title(f'{extended_pose_title[j]}')
                 line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+
+                ellips_r = []
+                if i < model.npos:
+                    for h in range(len(t)):
+                        ellips_r.append(np.sqrt(normals[i].T @ model.Q(x_traj[k][h, :]) @ normals[i]))
+                    # ax[j].plot(t, x_traj[k][:, i] + ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
+                    # ax[j].plot(t, x_traj[k][:, i] - ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
                 # ax[j].axhline(traj_xlim_min[i], color=line.get_color(), linestyle='--', linewidth=0.8)
                 # ax[j].axhline(traj_xlim_max[i], color=line.get_color(), linestyle='--', linewidth=0.8)
                 ax[j].set_xlabel('Time [s]')

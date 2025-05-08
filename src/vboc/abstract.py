@@ -144,7 +144,6 @@ class Model:
 
         for n in box_normals:
             expr = n.T @ self.x[:npos] + sqrt(n.T @ self.Q(self.x) @ n)
-            print(n.T @  self.x[:npos])
             self.con_h_expr_list.append(expr)
 
         self.con_h_expr = vertcat(*self.con_h_expr_list)

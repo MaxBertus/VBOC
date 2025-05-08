@@ -1,5 +1,5 @@
 # Solver Parameters
-prob_num: 100          # number of OCP to create dataset
+prob_num: 10          # number of OCP to create dataset
 n_steps: 200              # number of time steps in each test
 cpu_num: 26
 
