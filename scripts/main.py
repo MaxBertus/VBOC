@@ -292,13 +292,30 @@ def main():
 
     roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
     orient_init = np.column_stack([roll, pitch, yaw])
-    # orient_init = np.zeros((params.prob_num, model.nori)) # NOTE: non-random orientation
-
+    # orient_init = np.zeros((params.prob_num, model.nori)) # NOTE:null orientation
     q_init = np.hstack([pos_init, orient_init])
 
+
     # Obstacles box
-    box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-    box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
+    box_min_values = np.empty((params.prob_num, model.npos))
+    box_max_values = np.empty((params.prob_num, model.npos))
+
+    for i in range(params.prob_num):
+        min_dx = np.sqrt(np.array([1,0,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([1,0,0]).T)
+        min_dy = np.sqrt(np.array([0,1,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,1,0]).T)
+        min_dz = np.sqrt(np.array([0,0,1]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,0,1]).T)
+        dx = np.random.uniform(min_dx, model.max_width)
+        dy = np.random.uniform(min_dy, model.max_length)
+        dz = np.random.uniform(min_dz, model.max_height)
+        box_min_values[i, :] = np.array([dx, dy, dz])
+        dx = np.random.uniform(min_dx, model.max_width)
+        dy = np.random.uniform(min_dy, model.max_length)
+        dz = np.random.uniform(min_dz, model.max_height)
+        box_max_values[i, :] = np.array([dx, dy, dz])
+
+
+    # box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
+    # box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
     # box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
     # box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
@@ -311,7 +328,6 @@ def main():
         res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
 
     x_0, x_t, u_t, b_m, b_M, status = zip(*res)
-
     if all(item is None for item in x_0):
         warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
         print(status)

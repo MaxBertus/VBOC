@@ -18,7 +18,7 @@ levenberg_marquardt: 1e-5
 state_tol: 1e-3           # state tolerance
 # conv_tol: 1e-3            # convergence tolerance for the task
 cost_tol: 1e-3            # Tolerance for the cost
-vboc_repeat: 500         # VBOC repetition
+vboc_repeat: 5         # VBOC repetition
 
 # Training Parameters
 learning_rate: 1e-3       # learning rate
@@ -41,13 +41,13 @@ ct: 4.590e-5  # torque coefficient [Nm/(Hz)^2]
 max_w: 108    # max spinning rate [Hz]
 alpha_tilt: 20     # Tilt cant angle [degree]
 
-min_width: 0.525  # width/2 of the platform [m]
-min_length: 0.475 # length/2 of the platform [m]
+min_width: 0.525   # width/2 of the platform [m]
+min_length: 0.475  # length/2 of the platform [m]
 min_height: 0.2   # height/2 of the platform [m]
 
-max_width: 0.5 # max width/2 of the environment [m]
-max_length: 0.5 # max length/2 of the environment [m]
-max_height: 0.5 # min width/2 of the environment [m]
+max_width: 2.0 # max width/2 of the environment [m]
+max_length: 2.0 # max length/2 of the environment [m]
+max_height: 2.0 # min width/2 of the environment [m]
 
 # Data generation
 orient_g_rej: true # select orientation with gravity rejection

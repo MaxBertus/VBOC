@@ -1,6 +1,6 @@
 import re
 import numpy as np
-from casadi import MX, DM, horzcat, vertcat, dot, Function, sin, cos, tan, cross, fabs, sqrt
+from casadi import MX, DM, horzcat, vertcat, dot, Function, sin, cos, tan, cross, fabs, sqrt, diag
 from urdf_parser_py.urdf import URDF
 import adam
 from adam.casadi import KinDynComputations
@@ -98,7 +98,7 @@ class Model:
         )
 
         # explicit dynamics function
-        self.f_expl_func = Function('f_expl', [self.x, self.u], [self.f_expl])
+        # self.f_expl_func = Function('f_expl', [self.x, self.u], [self.f_expl])
 
         # BOUNDS
         # Input 
@@ -122,19 +122,35 @@ class Model:
 
         # Position
         # Define symbolic parameters for the box bounds
-        self.box_min = MX.sym("box_min", 3)  # [box_min_x, box_min_y, box_min_z]
-        self.box_max = MX.sym("box_max", 3)  # [box_max_x, box_max_y, box_max_z]
+        # self.box_min = MX.sym("box_min", 3)  # [box_min_x, box_min_y, box_min_z]
+        # self.box_max = MX.sym("box_max", 3)  # [box_max_x, box_max_y, box_max_z]
 
         # self.box_occupancy = np.array([-self.min_width, -self.min_length, -self.min_height,
         #                                 self.min_width, self.min_length, self.min_height]) 
-        
-        side = np.max([self.min_width, self.min_length, self.min_height])
-        self.box_occupancy = np.array([-side, -side, -side,
-                                        side, side, side])
 
+        D = diag(vertcat(self.min_width**2, self.min_length**2, self.min_height**2))
+        self.Q = Function('Q', [self.x], [self.R(self.x) @ D @ self.R(self.x).T])
 
-        self.env_dimensions = np.array([-self.max_width, -self.max_length, -self.max_height,
-                                        self.max_width, self.max_length, self.max_height]) 
+        box_normals = [
+            DM([1.0, 0.0, 0.0]),   # left
+            # DM([0.0, 1.0, 0.0]),   # back
+            # DM([0.0, 0.0, 1.0]),   # bottom
+            # DM([-1.0, 0.0, 0.0]),  # right
+            # DM([0.0, -1.0, 0.0]),  # front
+            # DM([0.0, 0.0, -1.0]),  # top
+        ]
+
+        self.con_h_expr_list = []
+
+        for n in box_normals:
+            expr = n.T @ self.x[:npos] + sqrt(n.T @ self.Q(self.x) @ n)
+            print(n.T @  self.x[:npos])
+            self.con_h_expr_list.append(expr)
+
+        self.con_h_expr = vertcat(*self.con_h_expr_list)
+
+        # self.env_dimensions = np.array([-self.max_width, -self.max_length, -self.max_height,
+        #                                 self.max_width, self.max_length, self.max_height]) 
 
         # Acados model
         self.amodel = AcadosModel()
@@ -151,6 +167,7 @@ class Model:
         self.nv = nq
         self.npos = npos
         self.nori = nori
+        self.nbox = self.con_h_expr.size()[0]
 
 class AbstractController:
     def __init__(self, model):
@@ -183,12 +200,20 @@ class AbstractController:
         # Path constraints
         self.ocp.constraints.lbx = np.full(self.model.nx, -1e4)  
         self.ocp.constraints.ubx = np.full(self.model.nx, 1e4)   
-        self.ocp.constraints.idxbx = np.arange(self.model.nx)       
+        self.ocp.constraints.idxbx = np.arange(self.model.nx)      
+
+        # self.ocp.model.con_h_expr = self.model.con_h_expr 
+        # self.ocp.constraints.lh = np.full(self.model.nbox, -1e4)
+        # self.ocp.constraints.uh = np.full(self.model.nbox, 1e4)
 
         # Terminal constraints
         self.ocp.constraints.lbx_e = np.full(self.model.nx, -1e4)  
         self.ocp.constraints.ubx_e = np.full(self.model.nx, 1e4)  
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
+
+        # self.ocp.model.con_h_expr_e = self.model.con_h_expr 
+        # self.ocp.constraints.lh_e = np.full(self.model.nbox, -1e4)
+        # self.ocp.constraints.uh_e = np.full(self.model.nbox, 1e4)
 
         # self.ocp.model.con_h_expr_e = vertcat(sqrt(self.model.x[self.model.npos]**2 + self.model.x[self.model.npos + 1]**2))
 
