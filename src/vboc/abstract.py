@@ -181,9 +181,9 @@ class AbstractController:
         self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
 
         # Path constraints
-        self.ocp.constraints.lbx = np.full(self.model.npos, np.zeros(self.model.npos))  
-        self.ocp.constraints.ubx = np.full(self.model.npos, np.zeros(self.model.npos))
-        self.ocp.constraints.idxbx = np.arange(self.model.npos)       
+        self.ocp.constraints.lbx = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.ubx = np.full(self.model.nq, np.zeros(self.model.nq))
+        self.ocp.constraints.idxbx = np.arange(self.model.nq)       
 
         # Terminal constraints
         self.ocp.constraints.lbx_e = np.full(self.model.nx, np.zeros(self.model.nx))  

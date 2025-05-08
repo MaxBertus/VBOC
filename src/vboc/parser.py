@@ -35,7 +35,6 @@ class Parameters:
         parameters = yaml.load(open(self.ROOT_DIR + '/config.yaml'), Loader=yaml.FullLoader)
 
         self.prob_num = int(parameters['prob_num'])
-        self.n_steps = int(parameters['n_steps'])
         self.cpu_num = int(parameters['cpu_num'])
         # self.build = False
         
