@@ -133,11 +133,11 @@ class Model:
 
         box_normals = [
             DM([1.0, 0.0, 0.0]),   # left
-            # DM([0.0, 1.0, 0.0]),   # back
-            # DM([0.0, 0.0, 1.0]),   # bottom
-            # DM([-1.0, 0.0, 0.0]),  # right
-            # DM([0.0, -1.0, 0.0]),  # front
-            # DM([0.0, 0.0, -1.0]),  # top
+            DM([0.0, 1.0, 0.0]),   # back
+            DM([0.0, 0.0, 1.0]),   # bottom
+            DM([-1.0, 0.0, 0.0]),  # right
+            DM([0.0, -1.0, 0.0]),  # front
+            DM([0.0, 0.0, -1.0]),  # top
         ]
 
         self.con_h_expr_list = []
@@ -193,32 +193,23 @@ class AbstractController:
 
         # CONSTRAINTS
         # Initial shooting node constraints
-        self.ocp.constraints.lbx_0 = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx_0 = np.full(self.model.nx, 1e4)  
-        self.ocp.constraints.idxbx_0 = np.arange(self.model.nx)       
+        self.ocp.constraints.lbx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.ubx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
 
         # Path constraints
-        self.ocp.constraints.lbx = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx = np.full(self.model.nx, 1e4)   
-        self.ocp.constraints.idxbx = np.arange(self.model.nx)      
-
-        # self.ocp.model.con_h_expr = self.model.con_h_expr 
-        # self.ocp.constraints.lh = np.full(self.model.nbox, -1e4)
-        # self.ocp.constraints.uh = np.full(self.model.nbox, 1e4)
+        self.ocp.model.con_h_expr = self.model.con_h_expr 
+        self.ocp.constraints.uh = np.full(self.model.nbox, 0.0)
+        self.ocp.constraints.lh = np.full(self.model.nbox, -1e2)
 
         # Terminal constraints
-        self.ocp.constraints.lbx_e = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx_e = np.full(self.model.nx, 1e4)  
-        self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
+        self.ocp.constraints.lbx_e = np.full(self.model.nv, np.zeros(self.model.nv))  
+        self.ocp.constraints.ubx_e = np.full(self.model.nv, np.zeros(self.model.nv))  
+        self.ocp.constraints.idxbx_e = np.arange(self.model.nq, self.model.nx)      
 
-        # self.ocp.model.con_h_expr_e = self.model.con_h_expr 
-        # self.ocp.constraints.lh_e = np.full(self.model.nbox, -1e4)
-        # self.ocp.constraints.uh_e = np.full(self.model.nbox, 1e4)
-
-        # self.ocp.model.con_h_expr_e = vertcat(sqrt(self.model.x[self.model.npos]**2 + self.model.x[self.model.npos + 1]**2))
-
-        # self.ocp.constraints.lh_e = np.array([0.0])
-        # self.ocp.constraints.uh_e = np.array([self.model.phi_hovering_max])
+        self.ocp.model.con_h_expr_e = self.model.con_h_expr 
+        self.ocp.constraints.uh_e = np.full(self.model.nbox, 0.0)
+        self.ocp.constraints.lh_e = np.full(self.model.nbox, -1e2)
 
         self.ocp.constraints.C = np.zeros((self.model.nv, self.model.nx))
         self.ocp.constraints.D = np.zeros((self.model.nv, self.model.nu))
