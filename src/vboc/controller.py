@@ -15,17 +15,11 @@ class ViabilityController(AbstractController):
             self.ocp_solver.set(i, 'u', self.u_guess[i])
             self.ocp_solver.set(i, 'p', d)
             if i != 0:
-                self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
-                self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
-                self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
-                self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
-                # print("lbx", np.hstack([box_min_values, np.full(self.model.nori + self.model.nv, -1e4)]))
-                # print("ubx", np.hstack([box_max_values, np.full(self.model.nori + self.model.nv, 1e4)]))
+                self.ocp_solver.constraints_set(i, "lbx", box_min_values)
+                self.ocp_solver.constraints_set(i, "ubx", box_max_values)
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1]) # NOTE: why?
         self.ocp_solver.constraints_set(self.N, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -1e4), np.zeros((self.model.nv,))]))
         self.ocp_solver.constraints_set(self.N, "ubx", np.hstack([box_max_values, np.full(self.model.nori, 1e4), np.zeros((self.model.nv,))]))
-        # print("lbx", np.hstack([box_min_values, np.full(self.model.nori, -1e4), np.zeros((self.model.nv,))]))
-        # print("ubx", np.hstack([box_max_values, np.full(self.model.nori, 1e4), np.zeros((self.model.nv,))]))
         self.ocp_solver.set(self.N, 'p', d)
 
         # Set the initial constraint
@@ -34,10 +28,8 @@ class ViabilityController(AbstractController):
         self.ocp_solver.constraints_set(0, "C", self.C, api='new')
 
         # Set initial bounds -> x0_pos = q_init, x0_vel free; (final bounds already set)
-        q_init_lb = np.hstack([q_init, np.full((self.model.nv,), -1e4)])
-        q_init_ub = np.hstack([q_init, np.full((self.model.nv,), 1e4)])
-        self.ocp_solver.constraints_set(0, "lbx", q_init_lb)
-        self.ocp_solver.constraints_set(0, "ubx", q_init_ub)
+        self.ocp_solver.constraints_set(0, "lbx", q_init)
+        self.ocp_solver.constraints_set(0, "ubx", q_init)
         # print("lbx", q_init_lb)
         # print("ubx", q_init_ub)
 

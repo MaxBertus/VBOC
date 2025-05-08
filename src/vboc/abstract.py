@@ -176,18 +176,18 @@ class AbstractController:
 
         # CONSTRAINTS
         # Initial shooting node constraints
-        self.ocp.constraints.lbx_0 = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx_0 = np.full(self.model.nx, 1e4)  
-        self.ocp.constraints.idxbx_0 = np.arange(self.model.nx)       
+        self.ocp.constraints.lbx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.ubx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
 
         # Path constraints
-        self.ocp.constraints.lbx = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx = np.full(self.model.nx, 1e4)   
-        self.ocp.constraints.idxbx = np.arange(self.model.nx)       
+        self.ocp.constraints.lbx = np.full(self.model.npos, np.zeros(self.model.npos))  
+        self.ocp.constraints.ubx = np.full(self.model.npos, np.zeros(self.model.npos))
+        self.ocp.constraints.idxbx = np.arange(self.model.npos)       
 
         # Terminal constraints
-        self.ocp.constraints.lbx_e = np.full(self.model.nx, -1e4)  
-        self.ocp.constraints.ubx_e = np.full(self.model.nx, 1e4)  
+        self.ocp.constraints.lbx_e = np.full(self.model.nx, np.zeros(self.model.nx))  
+        self.ocp.constraints.ubx_e = np.full(self.model.nx, np.zeros(self.model.nx))  
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
 
         # self.ocp.model.con_h_expr_e = vertcat(sqrt(self.model.x[self.model.npos]**2 + self.model.x[self.model.npos + 1]**2))
