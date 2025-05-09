@@ -219,6 +219,10 @@ class AbstractController:
         self.ocp.solver_options.globalization_alpha_min = self.params.alpha_min
         self.ocp.solver_options.levenberg_marquardt = self.params.levenberg_marquardt
 
+        # self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
+        # self.ocp.solver_options.nlp_solver_tol_eq = 1e-3
+        # self.ocp.solver_options.nlp_solver_tol_ineq = 1e-3
+
         # Debug
         self.ocp.solver_options.print_level = 0
 

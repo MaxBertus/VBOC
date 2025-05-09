@@ -23,10 +23,11 @@ install()
 def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values):
     controller.resetHorizon(N_guess)
 
-    # Randomize the initial state
-    d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
-    # d =np.array([1.0 for _ in range(model.nv)]) # FIXME: just for sanity check
-    # d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # FIXME: just for sanity check
+    # Set velocity direction
+    if args['check']:
+        d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    else:
+        d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
@@ -218,7 +219,8 @@ class CustomLoss(torch.nn.Module):
 def main():
     start_time = time.time()
 
-    ### PARSE ARGUMENTS
+    ### PARSE ARGUMENTS+
+    global args
     args = parse_args()
     robotic_system = args['system']
     available_systems = ['sth']
@@ -291,17 +293,20 @@ def main():
         max_phi = np.pi/2 
 
     roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
-    orient_init = np.column_stack([roll, pitch, yaw])
-    # orient_init = np.zeros((params.prob_num, model.nori)) # NOTE: non-random orientation
 
+    if args['check']:
+        orient_init = np.zeros((params.prob_num, model.nori))
+    else:
+        orient_init = np.column_stack([roll, pitch, yaw])
     q_init = np.hstack([pos_init, orient_init])
 
     # Obstacles box
-    box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
-    box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
-
-    # box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
-    # box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
+    if args['check']:
+        box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
+        box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
+    else:
+        box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
+        box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
     print('Start data generation')
     with Pool(params.cpu_num) as p:
@@ -318,11 +323,6 @@ def main():
         exit()
 
     x_data = np.vstack([i for i in x_0 if i is not None])
-    # x_traj = np.asarray([i for i in x_t if i is not None])
-    # u_traj = np.asarray([i for i in u_t if i is not None])
-    # b_min = np.asarray([i for i in b_m if i is not None])
-    # b_max = np.asarray([i for i in b_M if i is not None])
-
     x_traj = [i for i in x_t if i is not None]
     u_traj = [i for i in u_t if i is not None]
     b_min = list(b_m)
@@ -359,12 +359,12 @@ def main():
         pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
         extended_pose_title = ['Position', 'Orientation', 'Inclination']
         velocities_title = ['Linear velocity', 'Angular velocity']
-        pose_label = ['x [m]', 'y [m]', 'z [m]', 'r [rad]', 'p [rad]', 'y [rad]']
+        pose_label = ['x [m]', 'y [m]', 'z [m]', 'r [deg]', 'p [deg]', 'y [deg]']
         pose_legend = ['x', 'y', 'z', 'r', 'p', 'y']
-        vel_label = ['v$_x$ [m/s]', 'v$_y$ [m/s]', 'v$_z$ [m/s]', '$\omega_x$ [rad/s]', '$\omega_y$ [rad/s]', '$\omega_z$ [rad/s]']
+        vel_label = ['v$_x$ [m/s]', 'v$_y$ [m/s]', 'v$_z$ [m/s]', '$\omega_x$ [deg/s]', '$\omega_y$ [deg/s]', '$\omega_z$ [deg/s]']
         vel_legend = ['v$_x$', 'v$_y$', 'v$_z$', '$\omega_x$', '$\omega_y$', '$\omega_z$']
-        y_lab_pose = ['Pos. [m]', 'Orient. [rad]', 'Incl. [rad]']
-        y_lab_vel = ['v [m/s]', '$\omega$ [rad/s]']
+        y_lab_pose = ['Pos. [m]', 'Orient. [deg]', 'Incl. [deg]']
+        y_lab_vel = ['v [m/s]', '$\omega$ [deg/s]']
 
         # Recreate the plots directory and its subdirectories
         plots_dir = os.path.join(params.DATA_DIR, 'plots')
@@ -388,15 +388,18 @@ def main():
             colors = np.linspace(0, 1, horizon_)
             t = np.linspace(0, horizon_ * params.dt, horizon_)
 
-            traj_xlim_min = b_min[k].tolist() + [-max_phi, -max_phi, -np.pi]
-            traj_xlim_max = b_max[k].tolist() + [max_phi, max_phi, np.pi]
+            traj_xlim_min = b_min[k].tolist() + [-np.rad2deg(max_phi), -np.rad2deg(max_phi), -180.0]
+            traj_xlim_max = b_max[k].tolist() + [np.rad2deg(max_phi), np.rad2deg(max_phi), 180.0]
 
             # Plot the trajectory
             fig, ax = plt.subplots(2, 3)
             ax = ax.reshape(-1)
             for i in range(nq):
                 ax[i].grid(True, linewidth=0.5)
-                ax[i].scatter(x_traj[k][:, i], x_traj[k][:, nq + i], c=colors, cmap='coolwarm', s=1)
+                if i < model.npos:
+                    ax[i].scatter(x_traj[k][:, i], x_traj[k][:, nq + i], c=colors, cmap='coolwarm', s=1)
+                else:
+                    ax[i].scatter(np.rad2deg(x_traj[k][:, i]), np.rad2deg(x_traj[k][:, nq + i]), c=colors, cmap='coolwarm', s=1)
                 ax[i].set_xlim([traj_xlim_min[i], traj_xlim_max[i]])
                 ax[i].set_xlabel(f'{pose_label[i]}')
                 ax[i].set_ylabel(f'{vel_label[i]}')
@@ -406,7 +409,7 @@ def main():
             plt.close(fig)
 
             # Plot pose
-            fig, ax = plt.subplots(3, 1)
+            fig, ax = plt.subplots(2, 1)
             ax = ax.reshape(-1)
             j = 0
             for i in range(nq):
@@ -414,22 +417,25 @@ def main():
                     j += 1
                 ax[j].grid(True)
                 ax[j].set_title(f'{extended_pose_title[j]}')
-                line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+                if i < model.npos:
+                    line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+                else:
+                    line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i]), label=f'{pose_label[i]}')
                 # ax[j].axhline(traj_xlim_min[i], color=line.get_color(), linestyle='--', linewidth=0.8)
                 # ax[j].axhline(traj_xlim_max[i], color=line.get_color(), linestyle='--', linewidth=0.8)
                 ax[j].set_xlabel('Time [s]')
                 ax[j].set_ylabel(y_lab_pose[j])
                 ax[j].legend()
-            j += 1
-            ax[j].grid(True)
-            ax[j].set_title(f'{extended_pose_title[j]}')
-            line, = ax[j].plot(t, np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4])), label=f'{pose_label[i]}')
-            ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
-            ax[j].axhline(max_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
-            ax[j].axhline(model.phi_hovering_max, color='r', linestyle='--', linewidth=0.8)
-            ax[j].set_xlabel('Time [s]')
-            ax[j].set_ylabel(y_lab_pose[j])
-            ax[j].legend()
+            # j += 1
+            # ax[j].grid(True)
+            # ax[j].set_title(f'{extended_pose_title[j]}')
+            # line, = ax[j].plot(t, np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4])), label=f'{pose_label[i]}')
+            # ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
+            # ax[j].axhline(max_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
+            # ax[j].axhline(model.phi_hovering_max, color='r', linestyle='--', linewidth=0.8)
+            # ax[j].set_xlabel('Time [s]')
+            # ax[j].set_ylabel(y_lab_pose[j])
+            # ax[j].legend()
 
             plt.suptitle(f'Trajectory {k + 1}')
             plt.tight_layout()
@@ -445,7 +451,10 @@ def main():
                     j += 1
                 ax[j].grid(True)
                 ax[j].set_title(f'{velocities_title[j]}')
-                ax[j].plot(t, x_traj[k][:, nq + i], label=f'{vel_label[i]}')
+                if i < model.npos:
+                    line, = ax[j].plot(t, x_traj[k][:, i + nq], label=f'{vel_label[i]}')
+                else:
+                    line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i + nq]), label=f'{vel_label[i]}')
                 ax[j].set_xlabel('Time [s]')
                 ax[j].set_ylabel(y_lab_vel[j])
                 ax[j].legend()
