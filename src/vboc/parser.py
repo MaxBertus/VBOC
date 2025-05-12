@@ -22,6 +22,8 @@ def parse_args():
                         help='Activation function for the neural network')
     parser.add_argument('-c', '--check', action='store_true',
                         help='Sanity check: fixed d and box, and null orientation')
+    parser.add_argument('-g', '--generation', action='store_true',
+                    help='Generate the dataset for training the neural network')
     return vars(parser.parse_args())
 
 class Parameters:

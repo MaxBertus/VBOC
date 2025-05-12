@@ -120,6 +120,10 @@ class Model:
         self.phi_hovering_max = np.arctan2(ro, self.mass * self.g) # max inclination allowed for hovering 
         self.phi_max = np.arccos((self.mass*self.g)/(self.cf * 6 * np.cos(self.alpha_tilt)*self.u_bar))
 
+        # print("phi_hovering: ", np.rad2deg(self.phi_hovering))
+        # print("phi_hovering_max: ", np.rad2deg(self.phi_hovering_max))
+        # print("phi_max: ", np.rad2deg(self.phi_max))
+
         # Position
         # Define symbolic parameters for the box bounds
         self.box_min = MX.sym("box_min", 3)  # [box_min_x, box_min_y, box_min_z]

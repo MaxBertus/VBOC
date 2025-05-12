@@ -33,8 +33,8 @@ class ViabilityController(AbstractController):
         # print("lbx", q_init_lb)
         # print("ubx", q_init_ub)
 
-        x_terminal = self.ocp_solver.get(self.N, "x")
-        print("Terminal state:", x_terminal)
+        # x_terminal = self.ocp_solver.get(self.N, "x")
+        # print("Terminal state:", x_terminal)
 
         # Solve the OCP
         return self.ocp_solver.solve()
@@ -68,6 +68,7 @@ class ViabilityController(AbstractController):
             
             # Solve the OCP
             status = self.solve(q_init, d, box_min_values, box_max_values)
+            # self.ocp_solver.print_statistics()
 
             if status == 0 or status == 2:
                 # Compare the current cost with the previous one:
