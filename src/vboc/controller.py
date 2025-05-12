@@ -14,10 +14,14 @@ class ViabilityController(AbstractController):
             self.ocp_solver.set(i, 'x', self.x_guess[i])
             self.ocp_solver.set(i, 'u', self.u_guess[i])
             self.ocp_solver.set(i, 'p', d)
-            if i != 0:
-                self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi)]))
-                self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi)]))
+            if i != 0: # and i != self.N-1:
+                # self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi)]))
+                # self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi)]))
+                self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi), np.full(self.model.nv, -1e2)]))
+                self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi), np.full(self.model.nv, 1e2)]))
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1]) 
+        # self.ocp_solver.constraints_set(self.N-1, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi), np.zeros((self.model.nv,))]))
+        # self.ocp_solver.constraints_set(self.N-1, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi), np.zeros((self.model.nv,))]))
         self.ocp_solver.constraints_set(self.N, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi), np.zeros((self.model.nv,))]))
         self.ocp_solver.constraints_set(self.N, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi), np.zeros((self.model.nv,))]))
         self.ocp_solver.set(self.N, 'p', d)
