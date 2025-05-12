@@ -409,7 +409,7 @@ def main():
                 plt.close(fig)
 
                 # Plot pose
-                fig, ax = plt.subplots(2, 1)
+                fig, ax = plt.subplots(3, 1)
                 ax = ax.reshape(-1)
                 j = 0
                 for i in range(nq):
@@ -426,16 +426,16 @@ def main():
                     ax[j].set_xlabel('Time [s]')
                     ax[j].set_ylabel(y_lab_pose[j])
                     ax[j].legend()
-                # j += 1
-                # ax[j].grid(True)
-                # ax[j].set_title(f'{extended_pose_title[j]}')
-                # line, = ax[j].plot(t, np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4])), label=f'{pose_label[i]}')
+                j += 1
+                ax[j].grid(True)
+                ax[j].set_title(f'{extended_pose_title[j]}')
+                line, = ax[j].plot(t, np.rad2deg(np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4]))), label=f'{pose_label[i]}')
                 # ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
-                # ax[j].axhline(max_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
-                # ax[j].axhline(model.phi_hovering_max, color='r', linestyle='--', linewidth=0.8)
-                # ax[j].set_xlabel('Time [s]')
-                # ax[j].set_ylabel(y_lab_pose[j])
-                # ax[j].legend()
+                ax[j].axhline(np.rad2deg(max_phi), color=line.get_color(), linestyle='--', linewidth=0.8)
+                ax[j].axhline(np.rad2deg(model.phi_hovering_max), color='r', linestyle='--', linewidth=0.8)
+                ax[j].set_xlabel('Time [s]')
+                ax[j].set_ylabel(y_lab_pose[j])
+                ax[j].legend()
 
                 plt.suptitle(f'Trajectory {k + 1}')
                 plt.tight_layout()

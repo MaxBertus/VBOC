@@ -12,7 +12,7 @@ nlp_max_iter: 100
 qp_max_iter: 200
 alpha_reduction: 0.3
 alpha_min: 1e-2
-levenberg_marquardt: 1e-6
+levenberg_marquardt: 1e-7
 
 state_tol: 1e-3           # state tolerance
 # conv_tol: 1e-3            # convergence tolerance for the task
