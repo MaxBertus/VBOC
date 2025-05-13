@@ -37,8 +37,14 @@ class ViabilityController(AbstractController):
         # print("lbx", q_init_lb)
         # print("ubx", q_init_ub)
 
+        
+
         # x_terminal = self.ocp_solver.get(self.N, "x")
+        # x_initial = self.ocp_solver.get(0, "x")
+        # print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")       
+        # print("Initial state:", x_initial)
         # print("Terminal state:", x_terminal)
+        # print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
         # Solve the OCP
         return self.ocp_solver.solve()

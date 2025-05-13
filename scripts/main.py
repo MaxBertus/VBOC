@@ -25,7 +25,7 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
 
     # Set velocity direction
     if args['check']:
-        d = np.array([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        d = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     else:
         d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
 
@@ -527,9 +527,6 @@ def main():
                 plt.tight_layout()
                 plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
                 plt.close(fig)
-
-                # Print the explicit dynamics for the last step
-                # print(f'Explicit dynamics of trajectory {k + 1}:\n {model.f_expl_func(x_traj[k][-1, :], u_traj[k][-1, :]).full()}')
     
     # histogram of status
     # plt.figure()
