@@ -97,9 +97,6 @@ class Model:
             np.linalg.inv(self.J) @ (cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
         )
 
-        # explicit dynamics function
-        # self.f_expl_func = Function('f_expl', [self.x, self.u], [self.f_expl])
-
         # BOUNDS
         # Input 
         self.u_max = np.array([self.u_bar, self.u_bar, self.u_bar, self.u_bar, self.u_bar, self.u_bar])
@@ -119,6 +116,10 @@ class Model:
         self.phi_hovering = np.arctan2(ri, self.mass * self.g) # max inclination allowed for hovering
         self.phi_hovering_max = np.arctan2(ro, self.mass * self.g) # max inclination allowed for hovering 
         self.phi_max = np.arccos((self.mass*self.g)/(self.cf * 6 * np.cos(self.alpha_tilt)*self.u_bar))
+
+        # print("phi_hovering: ", np.rad2deg(self.phi_hovering))
+        # print("phi_hovering_max: ", np.rad2deg(self.phi_hovering_max))
+        # print("phi_max: ", np.rad2deg(self.phi_max))
 
         # Position
         # Define symbolic parameters for the box bounds
@@ -192,8 +193,8 @@ class AbstractController:
 
         # CONSTRAINTS
         # Initial shooting node constraints
-        self.ocp.constraints.lbx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
-        self.ocp.constraints.ubx_0 = np.full(self.model.nq, np.zeros(self.model.nq))  
+        self.ocp.constraints.lbx_0 = np.full(self.model.nq, 0.0)
+        self.ocp.constraints.ubx_0 = np.full(self.model.nq, 0.0)
         self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
 
         # Path constraints
@@ -201,10 +202,14 @@ class AbstractController:
         self.ocp.constraints.uh = np.full(self.model.nbox, 0.0)
         self.ocp.constraints.lh = np.full(self.model.nbox, -1e2)
 
+        self.ocp.constraints.lbx = np.hstack([np.full(self.model.nori, -np.pi), np.full(self.model.nv, -1e2)])
+        self.ocp.constraints.ubx = np.hstack([np.full(self.model.nori, np.pi), np.full(self.model.nv, 1e2)]) 
+        self.ocp.constraints.idxbx = np.arange(self.model.npos, self.model.nx)       
+
         # Terminal constraints
-        self.ocp.constraints.lbx_e = np.full(self.model.nv, np.zeros(self.model.nv))  
-        self.ocp.constraints.ubx_e = np.full(self.model.nv, np.zeros(self.model.nv))  
-        self.ocp.constraints.idxbx_e = np.arange(self.model.nq, self.model.nx)      
+        self.ocp.constraints.lbx_e = np.full(self.model.nori + self.model.nv, 0.0) 
+        self.ocp.constraints.ubx_e = np.full(self.model.nori + self.model.nv, 0.0)  
+        self.ocp.constraints.idxbx_e = np.arange(self.model.npos, self.model.nx)      
 
         self.ocp.model.con_h_expr_e = self.model.con_h_expr 
         self.ocp.constraints.uh_e = np.full(self.model.nbox, 0.0)

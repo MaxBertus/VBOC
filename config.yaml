@@ -1,6 +1,5 @@
 # Solver Parameters
-prob_num: 10          # number of OCP to create dataset
-n_steps: 200              # number of time steps in each test
+prob_num: 1          # number of OCP to create dataset
 cpu_num: 26
 
 N: 50                    # horizon in seconds
@@ -9,16 +8,16 @@ dt: 10e-3                  # time step
 #alpha: 15                 # safety margin 
 
 solver_mode: 'BALANCE'    # HPIPM mode, can be --> 'BALANCE', 'ROBUST', 'SPEED', 'SPEED_ABS'
-nlp_max_iter: 100
+nlp_max_iter: 1000
 qp_max_iter: 200
 alpha_reduction: 0.3
 alpha_min: 1e-2
-levenberg_marquardt: 1e-5
+levenberg_marquardt: 1e-9
 
 state_tol: 1e-3           # state tolerance
 # conv_tol: 1e-3            # convergence tolerance for the task
 cost_tol: 1e-3            # Tolerance for the cost
-vboc_repeat: 5         # VBOC repetition
+vboc_repeat: 3         # VBOC repetition
 
 # Training Parameters
 learning_rate: 1e-3       # learning rate
@@ -41,8 +40,8 @@ ct: 4.590e-5  # torque coefficient [Nm/(Hz)^2]
 max_w: 108    # max spinning rate [Hz]
 alpha_tilt: 20     # Tilt cant angle [degree]
 
-min_width: 0.525   # width/2 of the platform [m]
-min_length: 0.475  # length/2 of the platform [m]
+min_width: 0.525  # width/2 of the platform [m]
+min_length: 0.475 # length/2 of the platform [m]
 min_height: 0.2   # height/2 of the platform [m]
 
 max_width: 2.0 # max width/2 of the environment [m]

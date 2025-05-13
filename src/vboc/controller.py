@@ -16,9 +16,13 @@ class ViabilityController(AbstractController):
             self.ocp_solver.set(i, 'p', d)
             if i != 0:
                 self.ocp_solver.constraints_set(i, "uh", np.hstack([box_min_values, box_max_values]))
+                self.ocp_solver.constraints_set(i, "lbx", np.hstack([np.full(self.model.nori, -np.pi), np.full(self.model.nv, -1e2)]))
+                self.ocp_solver.constraints_set(i, "ubx", np.hstack([np.full(self.model.nori, np.pi), np.full(self.model.nv, 1e2)]))
         self.ocp_solver.set(self.N, 'x', self.x_guess[-1])
-        # self.ocp_solver.constraints_set(self.N, "lbx", np.zeros((self.model.nv,)))
-        # self.ocp_solver.constraints_set(self.N, "ubx", np.zeros((self.model.nv,)))
+        self.ocp_solver.constraints_set(self.N-1, "lbx", np.hstack([np.full(self.model.nori, -np.pi), np.zeros((self.model.nv,))]))
+        self.ocp_solver.constraints_set(self.N-1, "ubx", np.hstack([np.full(self.model.nori, np.pi), np.zeros((self.model.nv,))]))
+        self.ocp_solver.constraints_set(self.N, "lbx", np.hstack([np.full(self.model.nori, -np.pi), np.zeros((self.model.nv,))]))
+        self.ocp_solver.constraints_set(self.N, "ubx", np.hstack([np.full(self.model.nori, np.pi), np.zeros((self.model.nv,))]))
         self.ocp_solver.constraints_set(self.N, "uh", np.hstack([box_min_values, box_max_values]))
         self.ocp_solver.set(self.N, 'p', d)
 
@@ -30,7 +34,17 @@ class ViabilityController(AbstractController):
         # Set initial bounds -> x0_pos = q_init, x0_vel free; (final bounds already set)
         self.ocp_solver.constraints_set(0, "lbx", q_init)
         self.ocp_solver.constraints_set(0, "ubx", q_init)
+        # print("lbx", q_init_lb)
+        # print("ubx", q_init_ub)
 
+        # x_terminal = self.ocp_solver.get(self.N, "x")
+        # x_initial = self.ocp_solver.get(0, "x")
+        # print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")       
+        # print("Initial state:", x_initial)
+        # print("Terminal state:", x_terminal)
+        # print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+        # Solve the OCP
         return self.ocp_solver.solve()
     
     # def solveVBOC(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
@@ -62,6 +76,7 @@ class ViabilityController(AbstractController):
             
             # Solve the OCP
             status = self.solve(q_init, d, box_min_values, box_max_values)
+            # self.ocp_solver.print_statistics()
 
             if status == 0 or status == 2:
                 # Compare the current cost with the previous one:
