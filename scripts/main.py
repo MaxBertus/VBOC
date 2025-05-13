@@ -306,18 +306,23 @@ def main():
         box_min_values = np.empty((params.prob_num, model.npos))
         box_max_values = np.empty((params.prob_num, model.npos))
 
-        for i in range(params.prob_num):
-            min_dx = np.sqrt(np.array([1,0,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([1,0,0]).T)
-            min_dy = np.sqrt(np.array([0,1,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,1,0]).T)
-            min_dz = np.sqrt(np.array([0,0,1]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,0,1]).T)
-            dx = np.random.uniform(min_dx, model.max_width)
-            dy = np.random.uniform(min_dy, model.max_length)
-            dz = np.random.uniform(min_dz, model.max_height)
-            box_min_values[i, :] = np.array([dx, dy, dz])
-            dx = np.random.uniform(min_dx, model.max_width)
-            dy = np.random.uniform(min_dy, model.max_length)
-            dz = np.random.uniform(min_dz, model.max_height)
-            box_max_values[i, :] = np.array([dx, dy, dz])
+        if args['check']:
+            for i in range(params.prob_num):
+                box_min_values[i,:] = np.array([model.max_width, model.max_length, model.max_height])
+                box_max_values[i,:] = np.array([model.max_width, model.max_length, model.max_height])
+        else:
+            for i in range(params.prob_num):
+                min_dx = np.sqrt(np.array([1,0,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([1,0,0]).T)
+                min_dy = np.sqrt(np.array([0,1,0]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,1,0]).T)
+                min_dz = np.sqrt(np.array([0,0,1]) @ model.Q(np.hstack([q_init[i,:], np.zeros(model.nv)])) @ np.array([0,0,1]).T)
+                dx = np.random.uniform(min_dx, model.max_width)
+                dy = np.random.uniform(min_dy, model.max_length)
+                dz = np.random.uniform(min_dz, model.max_height)
+                box_min_values[i, :] = np.array([dx, dy, dz])
+                dx = np.random.uniform(min_dx, model.max_width)
+                dy = np.random.uniform(min_dy, model.max_length)
+                dz = np.random.uniform(min_dz, model.max_height)
+                box_max_values[i, :] = np.array([dx, dy, dz])
 
 
         # box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
@@ -409,7 +414,7 @@ def main():
                 colors = np.linspace(0, 1, horizon_)
                 t = np.linspace(0, horizon_ * params.dt, horizon_)
 
-                traj_xlim_min = b_min[k].tolist() + [-np.rad2deg(max_phi), -np.rad2deg(max_phi), -180.0]
+                traj_xlim_min = (-b_min[k]).tolist() + [-np.rad2deg(max_phi), -np.rad2deg(max_phi), -180.0]
                 traj_xlim_max = b_max[k].tolist() + [np.rad2deg(max_phi), np.rad2deg(max_phi), 180.0]
 
                 # Plot the trajectory
@@ -518,10 +523,13 @@ def main():
                     rotation_matrix = Rot.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
 
                     # Define the arrow directions (unit vectors in local frame)
-                    arrow_length = 0.01  # Length of the arrows
-                    x_arrow = rotation_matrix[:, 0] * arrow_length
-                    y_arrow = rotation_matrix[:, 1] * arrow_length
-                    z_arrow = rotation_matrix[:, 2] * arrow_length
+                    # arrow_length = 0.1  # Length of the arrows
+                    # x_arrow = rotation_matrix[:, 0] * arrow_length
+                    # y_arrow = rotation_matrix[:, 1] * arrow_length
+                    # z_arrow = rotation_matrix[:, 2] * arrow_length
+                    x_arrow = rotation_matrix[:, 0] * model.min_width
+                    y_arrow = rotation_matrix[:, 1] * model.min_length
+                    z_arrow = rotation_matrix[:, 2] * model.min_height
 
                     # Plot the arrows
                     ax.quiver(
@@ -540,9 +548,9 @@ def main():
                 ax.set_xlabel('X [m]')
                 ax.set_ylabel('Y [m]')
                 ax.set_zlabel('Z [m]')
-                # ax.set_xlim(traj_xlim_min[0], traj_xlim_max[0])
-                # ax.set_ylim(traj_xlim_min[1], traj_xlim_max[1])
-                # ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
+                ax.set_xlim(traj_xlim_min[0], traj_xlim_max[0])
+                ax.set_ylim(traj_xlim_min[1], traj_xlim_max[1])
+                ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
                 ax.set_title(f'3D Position Trajectory {k + 1}')
                 set_axes_equal(ax)
 
