@@ -322,6 +322,9 @@ def main():
         # split number of problems in smaller sets, to allow intermediate savings 
         sub_batch = 100
         n_batch = int(params.prob_num/sub_batch)
+
+        x_data, x_traj, u_traj, b_min, b_max = [], [], [], [], []
+
         for nb in range(n_batch):  
             with Pool(params.cpu_num) as p:
 
@@ -340,7 +343,7 @@ def main():
             all_d_list.extend(d_list)
 
             if all(item is None for item in x_0):
-                warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
+                warnings.warn(f'No solution found for any problem in batch {nb}. Exiting the program.', RuntimeWarning)
                 print(status)
             if all(item is None for item in all_x_0):
                 warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
@@ -366,7 +369,7 @@ def main():
             np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
         print('Total number of points solved: %d' % len(x_data))
 
-        if args['plot']:
+        if params.plot:
 
             # Labels and titles
             pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
