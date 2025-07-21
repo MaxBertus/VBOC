@@ -204,10 +204,16 @@ class RegressionNN:
     def plot_input_output(self, input_test, input_val, true_output_test, true_output_val,epoch):
         with torch.no_grad():
             input = torch.Tensor(input_test).to(self.device)
-            net_output_test = self.model(input).numpy()
+            net_output_test = self.model(input).cpu().numpy()
 
             input = torch.Tensor(input_val).to(self.device)
-            net_output_val = self.model(input_val).numpy()
+            net_output_val = self.model(input_val).cpu().numpy()
+
+        # Convert true outputs to numpy if they're tensors
+        if isinstance(true_output_test, torch.Tensor):
+            true_output_test = true_output_test.cpu().numpy()
+        if isinstance(true_output_val, torch.Tensor):
+            true_output_val = true_output_val.cpu().numpy()
 
         fig = plt.figure(figsize=(12, 6))
         plt.subplot(1, 2, 1)
