@@ -28,7 +28,7 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
 
     # Set velocity direction
     if args['check']:
-        d = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        d = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
     else:
         #d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
         d = np.array([np.random.normal() for _ in range(model.nv)])
@@ -320,7 +320,12 @@ def main():
 
         all_x_0, all_x_t, all_u_t, all_b_m, all_b_M, all_status, all_d_list = [],[],[],[],[],[],[]
         # split number of problems in smaller sets, to allow intermediate savings 
-        sub_batch = 100
+        
+        if args['check']:
+            sub_batch = 1
+        else:
+            sub_batch = 100
+        
         n_batch = int(params.prob_num/sub_batch)
 
         x_data, x_traj, u_traj, b_min, b_max = [], [], [], [], []
@@ -386,13 +391,13 @@ def main():
 
             # Clear the entire data directory
             if os.path.exists(plots_dir):
-                # for file in os.listdir(plots_dir):
-                #     file_path = os.path.join(plots_dir, file)
-                #     if os.path.isdir(file_path):
-                #         shutil.rmtree(file_path)  # Remove directories
-                #     else:
-                #         os.remove(file_path)  # Remove files
-                pass
+                for file in os.listdir(plots_dir):
+                    file_path = os.path.join(plots_dir, file)
+                    if os.path.isdir(file_path):
+                        shutil.rmtree(file_path)  # Remove directories
+                    else:
+                        os.remove(file_path)  # Remove files
+                # pass
             else:
                 os.makedirs(plots_dir)
 
@@ -412,7 +417,7 @@ def main():
 
             # Start plotting 
             for k in range(len(x_traj)):
-                if k % 50 == 0:
+                if k % 50 == 0 or args['check']:
                     horizon_ = x_traj[k].shape[0]
                     colors = np.linspace(0, 1, horizon_)
                     t = np.linspace(0, horizon_ * params.dt, horizon_)
