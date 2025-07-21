@@ -17,8 +17,7 @@ from scipy.spatial.transform import Rotation as Rot
 import shutil
 from mpl_toolkits.mplot3d import Axes3D
 import warnings
-from rich.traceback import install
-install()
+
 
 progress_var = Value('i', 0)
 
@@ -227,6 +226,7 @@ class CustomLoss(torch.nn.Module):
         return self.alpha * l2 + self.beta * l1_over 
     
 def main():
+    #np.random.seed(0)
     start_time = time.time()
 
     ### PARSE ARGUMENTS+
@@ -284,7 +284,11 @@ def main():
     }
     act_fun = nls[act]
     nn_filename = f'{params.NN_DIR}_{act}.pt'
-    ub = 1
+    if act in ['tanh', 'sine']:
+        # ub = max(model.x_max[nq:]) * np.sqrt(nq)    # NOTE: check this
+        ub = 1
+    else:
+        ub = 1
     
     if args['generation']:
 
@@ -342,6 +346,8 @@ def main():
             if all(item is None for item in x_0):
                 warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
                 print(status)
+                #exit()
+
             if all(item is None for item in all_x_0):
                 warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
                 print(status)
@@ -565,6 +571,7 @@ def main():
 
     if args['training']: 
         vel_considered = 1
+
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
@@ -577,13 +584,14 @@ def main():
         x_data = np.hstack((b_data, x_data[:, 3:]))
         np.random.shuffle(x_data)
 
-        nb = b_data.shape[1]             
-        nbori = nb+model.nori            
-        nx_train = nbori+model.nv
-
+        nb = b_data.shape[1]                 # 6
+        nbori = nb+model.nori                # 6 + 3  
+        nx_train = nbori+model.nv            # 9 + 6 = 15
+        #nx_train = nbori + vel_considered
         params.nx=nx_train
         print(f'nx_train {nx_train}')
         nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)
+        #nn_model = NovelNeuralNetwork(params)
         loss_fn = torch.nn.MSELoss()
         #loss_fn = RAELoss()
         optimizer = torch.optim.Adam(nn_model.parameters(), 
@@ -601,13 +609,15 @@ def main():
                 plt.title(f'Histogram x[{jj}]')
 
                 plt.show() 
-
+                
         # Compute outputs and inputs
         n = len(x_data)
         mean = np.mean(x_data[:, :nbori])
         std = np.std(x_data[:, :nbori])
         x_data[:, :nbori] = (x_data[:, :nbori] - mean) / std
-        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1)
+        #x_data = normalize_data(x_data,np.arange(nbori).tolist())   
+
+        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1)    # correct only velocities
         for k in range(n):
             if y_data[k] != 0.: 
                 x_data[k, nbori:] /= y_data[k] 

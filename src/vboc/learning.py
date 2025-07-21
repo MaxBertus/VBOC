@@ -10,28 +10,37 @@ from torch.nn.functional import mse_loss
 from tqdm import tqdm
 from urdf_parser_py.urdf import URDF
 import adam
-from adam.pytorch import KinDynComputations
-
 
 class NeuralNetwork(nn.Module):
     """ A simple feedforward neural network. """
-    def __init__(self, input_size, hidden_size, output_size, activation=nn.ReLU(), ub=None):
+    def __init__(self, input_size, hidden_size, output_size, number_hidden, activation=nn.ReLU(), ub=None):
         super().__init__()
-        self.linear_stack = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            activation,
-            nn.Linear(hidden_size, hidden_size),
-            activation,
-            nn.Linear(hidden_size, hidden_size),
-            activation,
-            nn.Linear(hidden_size, output_size),
-            activation,
-        )
+        layers=[]
+
+        # Input layer
+        layers.append(nn.Linear(input_size, hidden_size))
+        layers.append(activation)
+        
+        # Hidden layers
+        for _ in range(number_hidden):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(activation)
+        
+        # Output layer
+        layers.append(nn.Linear(hidden_size, output_size))
+        layers.append(activation)
+
+        self.linear_stack = nn.Sequential(*layers)
+
         self.ub = ub if ub is not None else 1
         self.initialize_weights()
 
+        #self.input_size = input_size
+
     def forward(self, x):
+        #out = self.linear_stack(x[:,:self.input_size])* self.ub 
         out = self.linear_stack(x) * self.ub 
+
         return out #(out + 1) * self.ub / 2
     
     def initialize_weights(self):
@@ -71,10 +80,13 @@ class NovelNeuralNetwork(nn.Module):
         net = [nn.Linear(input_size, hidden_size), nl]
         for _ in range(hidden_layers):
             net.append(nn.Linear(hidden_size, hidden_size))
-            net.append(nls[nl])
-        net.append([nn.Linear(hidden_size, 1), nl])
+            net.append(nls[activation])
+        net.append(nn.Linear(hidden_size, 1))
+        net.append(nls[activation])
 
+        print(*net)
         self.model = nn.Sequential(*net)
+
         self.v_max = v_max if v_max is not None else 1
 
     def forward(self, x):
@@ -90,6 +102,8 @@ class RegressionNN:
         self.optimizer = optimizer
         self.beta = params.beta
         self.batch_size = params.batch_size
+        self.plot_train = params.plot
+        self.data_dir = params.DATA_DIR
 
     def training(self, x_train_val, y_train_val, split, epochs, refine=False):
         """ Training of the neural network. """
@@ -102,9 +116,10 @@ class RegressionNN:
         loss_evol_train = []
         loss_evol_val = []
         loss_lp = 1
-
+        plot_epochs = 500
+        # plot_epochs = epochs / plot_epochs
         n = len(x_train)
-        for _ in range(epochs):
+        for ep in range(epochs):
             self.model.train()
             # Shuffle the data
             idx = torch.randperm(n)
@@ -115,11 +130,26 @@ class RegressionNN:
             for x, y in zip(x_batches, y_batches):
                 # Forward pass
                 y_pred = self.model(x)
+
+                # NAN CHECK
+                if torch.isnan(y_pred).any():
+                    print(f"NaN detected in outputs at epoch {ep}")
+                    break
                 # Compute the loss
                 loss = self.loss_fn(y_pred, y)
+
+                if torch.isnan(loss).any():
+                    print(f"NaN detected in loss at epoch {ep}")
+                    break
                 # Backward and optimize
                 self.optimizer.zero_grad()
                 loss.backward()
+
+                for name, param in self.model.named_parameters():
+                    if torch.isnan(param.grad).any():
+                        print(f"NaN detected in gradients of {name} at epoch {ep}")
+                        break
+
                 self.optimizer.step()
 
                 loss_lp = self.beta * loss_lp + (1 - self.beta) * loss.item()
@@ -127,8 +157,15 @@ class RegressionNN:
             loss_evol_train.append(loss_lp)
             # Validation
             loss_val = self.validation(x_val, y_val)
+            if ep % 100 == 0: 
+                print(f'Loss training: {loss_lp}')
+                print(f'Loss validation: {loss_val}')
             loss_evol_val.append(loss_val)
             progress_bar.update(1)
+
+            random_idx = np.random.randint(0, x_val.shape[0], 50)
+            if ep % plot_epochs == 0 and ep > 0:
+                self.plot_input_output(x_train[random_idx], x_val[random_idx], y_train[random_idx], y_val[random_idx],ep)
 
         progress_bar.close()
         return loss_evol_train, loss_evol_val
@@ -162,7 +199,39 @@ class RegressionNN:
             y_pred = torch.cat(y_pred, dim=0)
             rmse = torch.sqrt(mse_loss(y_pred, y_test)).item()
             rel_err = (y_pred - y_test) / y_test  # torch.maximum(y_test, torch.Tensor([1.]).to(self.device))
-        return rmse, rel_err    
+        return rmse, rel_err  
+
+    def plot_input_output(self, input_test, input_val, true_output_test, true_output_val,epoch):
+        with torch.no_grad():
+            input = torch.Tensor(input_test).to(self.device)
+            net_output_test = self.model(input).numpy()
+
+            input = torch.Tensor(input_val).to(self.device)
+            net_output_val = self.model(input_val).numpy()
+
+        fig = plt.figure(figsize=(12, 6))
+        plt.subplot(1, 2, 1)
+        plt.grid(True, which='both')
+        plt.plot(true_output_test, label='True value', marker='o', linestyle='', c='g')
+        plt.plot(net_output_test, label='Network output', marker='x', linestyle='', c='r')
+        plt.legend()
+        plt.title(f'Predicition training data')
+
+        plt.subplot(1, 2, 2)
+        plt.grid(True, which='both')
+        plt.plot(true_output_val, label='True value', marker='o', linestyle='', c='g')
+        plt.plot(net_output_val, label='Network output', marker='x', linestyle='', c='r')
+        plt.legend()
+        plt.title(f'Prediction validation data')
+
+        fig.suptitle(f'Epoch {epoch}', fontsize=16)
+
+        plt.savefig(self.data_dir + f'training_validation_{epoch}.png')
+        if self.plot_train:
+            plt.show()
+        else:
+            plt.close()
+
 
     # def trainingOLD(self, x_train, y_train, epochs):
     #     """ Training of the neural network. """

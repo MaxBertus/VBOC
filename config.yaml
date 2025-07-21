@@ -14,14 +14,14 @@ alpha_reduction: 0.3
 alpha_min: 1e-2
 levenberg_marquardt: 1e-9
 
-state_tol: 1e-3           # state tolerance
+state_tol: 1e-6           # state tolerance
 # conv_tol: 1e-3            # convergence tolerance for the task
-cost_tol: 1e-3            # Tolerance for the cost
-vboc_repeat: 3         # VBOC repetition
+cost_tol: 1e-6            # Tolerance for the cost
+vboc_repeat: 5         # VBOC repetition
 
 # Training Parameters
 learning_rate: 1e-3       # learning rate
-batch_size: 4096          # batch size, 4096, 8192, 16384
+batch_size: 1024          # batch size, 4096, 8192, 16384
 beta: 0.95                # low pass filter coefficient
 train_ratio: 0.7          # training dataset % size
 val_ratio: 0.2            # validation dataset % size

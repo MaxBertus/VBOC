@@ -175,7 +175,7 @@ class AbstractController:
         # COST
         # Maximize initial velocity
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 =  dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
+        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
         self.ocp.parameter_values = np.zeros(self.model.nv)
 
         # CONSTRAINTS
@@ -198,7 +198,6 @@ class AbstractController:
         self.ocp.constraints.idxbx_e = np.arange(self.model.nx)      
 
         # self.ocp.model.con_h_expr_e = vertcat(sqrt(self.model.x[self.model.npos]**2 + self.model.x[self.model.npos + 1]**2))
-
         # self.ocp.constraints.lh_e = np.array([0.0])
         # self.ocp.constraints.uh_e = np.array([self.model.phi_hovering_max])
 
@@ -225,6 +224,8 @@ class AbstractController:
         self.ocp.solver_options.globalization_alpha_reduction = self.params.alpha_reduction
         self.ocp.solver_options.globalization_alpha_min = self.params.alpha_min
         self.ocp.solver_options.levenberg_marquardt = self.params.levenberg_marquardt
+
+        self.ocp.solver_options.tol = self.params.state_tol
 
         # self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
         # self.ocp.solver_options.nlp_solver_tol_eq = 1e-3

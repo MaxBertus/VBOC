@@ -93,6 +93,10 @@ class ViabilityController(AbstractController):
                 
                 gamma = gamma_new
 
+                # if r >= 1:
+                #     old_sol = np.copy(x_sol)
+                # else:
+                #     old_sol=np.zeros((N + n, self.model.nx))
                 # Rollout the solution
                 x_sol = np.empty((N + n, self.model.nx))
                 u_sol = np.empty((N + n, self.model.nu))    # last control is not used
@@ -102,14 +106,19 @@ class ViabilityController(AbstractController):
                 x_sol[N:] = self.ocp_solver.get(N, 'x')
                 u_sol[N:] = np.zeros((n, self.model.nu))
 
+                # solutions_difference = np.abs(old_sol - x_sol)
+                
+
                 # Reset the initial guess with the previous solution
                 self.setGuess(x_sol, u_sol)
                 # Increase the horizon
                 N += n
                 self.resetHorizon(N)
+                # print(f'Status {status}')
             else:     
                 return None, None, None, status
         if status == 0:
+            # print(f'Number of repetitions {r} and status {status}')
             return x_sol, u_sol, N, status
         else:
             return None, None, None, status
