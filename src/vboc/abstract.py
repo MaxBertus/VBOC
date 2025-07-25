@@ -188,13 +188,13 @@ class AbstractController:
         # COST
         # Maximize initial velocity
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 =  dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
+        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
         self.ocp.parameter_values = np.zeros(self.model.nv)
 
         # CONSTRAINTS
         # Initial shooting node constraints
-        self.ocp.constraints.lbx_0 = np.full(self.model.nq, 0.0)
-        self.ocp.constraints.ubx_0 = np.full(self.model.nq, 0.0)
+        self.ocp.constraints.lbx_0 = np.full(self.model.nq, 0.0) 
+        self.ocp.constraints.ubx_0 = np.full(self.model.nq, 0.0) 
         self.ocp.constraints.idxbx_0 = np.arange(self.model.nq)       
 
         # Path constraints
@@ -238,6 +238,8 @@ class AbstractController:
         self.ocp.solver_options.globalization_alpha_reduction = self.params.alpha_reduction
         self.ocp.solver_options.globalization_alpha_min = self.params.alpha_min
         self.ocp.solver_options.levenberg_marquardt = self.params.levenberg_marquardt
+
+        self.ocp.solver_options.tol = self.params.state_tol
 
         # Debug
         self.ocp.solver_options.print_level = 0

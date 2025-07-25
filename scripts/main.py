@@ -4,7 +4,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from multiprocessing import Pool
+from multiprocessing import Pool, Value
 from urdf_parser_py.urdf import URDF
 import adam 
 from adam.numpy import KinDynComputations  
@@ -12,7 +12,7 @@ import torch
 from vboc.parser import Parameters, parse_args
 from vboc.abstract import Model
 from vboc.controller import ViabilityController
-from vboc.learning import NeuralNetwork, RegressionNN, plot_brs
+from vboc.learning import NeuralNetwork, RegressionNN, plot_brs, NovelNeuralNetwork
 from scipy.spatial.transform import Rotation as Rot
 import shutil
 from mpl_toolkits.mplot3d import Axes3D
@@ -20,14 +20,17 @@ import warnings
 from rich.traceback import install
 install()
 
+progress_var = Value('i', 0)
+
 def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values):
+    global progress_var
     controller.resetHorizon(N_guess)
 
     # Set velocity direction
     if args['check']:
         d = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     else:
-        d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
+        d = np.array([np.random.normal() for _ in range(model.nv)])
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
@@ -42,10 +45,15 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
 
     # Solve the OCP
     x_star, u_star, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=vboc_repeat)
+
+    with progress_var.get_lock():  # Ensure thread-safe access
+        progress_var.value += 1  # Increment the count of completed tasks
+        if progress_var.value % 100 == 0: 
+            print(f" Progress: {progress_var.value} / {controller.model.params.prob_num}")
     if x_star is None:
-        return None, None, None, box_min_values, box_max_values, status, 
+        return None, None, None, box_min_values, box_max_values, status, d
     else:
-        return x_star[0], x_star, u_star, box_min_values, box_max_values, status
+        return x_star[0], x_star, u_star, box_min_values, box_max_values, status, d
     
 # def fixedVelocityDir(N_guess, N_increment, n_pts=100 ):  
 #     """ Compute data on section of the viability kernel"""
@@ -232,6 +240,7 @@ def main():
         exit()
     params = Parameters(robotic_system) 
     params.build = args['build']
+    plot = args['plot']
     act = args['activation']
 
     ### MODEL AND CONTROLLER DEFINITION
@@ -273,11 +282,7 @@ def main():
     }
     act_fun = nls[act]
     nn_filename = f'{params.NN_DIR}_{act}.pt'
-    if act in ['tanh', 'sine']:
-        # ub = max(model.x_max[nq:]) * np.sqrt(nq)    # NOTE: check this
-        ub = 1
-    else:
-        ub = 100
+    ub = 1
     
     if args['generation']:
 
@@ -332,34 +337,63 @@ def main():
         # box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
 
         print('Start data generation')
-        with Pool(params.cpu_num) as p:
-            # inputs --> (initial random configuration, horizon)
-            # res = p.starmap(computeDataOnBorder, [(q0, N) for q0 in q_init])
 
-            res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max) for q0, box_min, box_max in zip(q_init, box_min_values, box_max_values)])
+        all_x_0, all_x_t, all_u_t, all_b_m, all_b_M, all_status, all_d_list = [],[],[],[],[],[],[]
+        # split number of problems in smaller sets, to allow intermediate savings 
+        
+        if args['check']:
+            sub_batch = 1
+        else:
+            sub_batch = 100
+        
+        n_batch = int(params.prob_num/sub_batch)
 
-        x_0, x_t, u_t, b_m, b_M, status = zip(*res)
+        x_data, x_traj, u_traj, b_min, b_max = [], [], [], [], []
 
-        if all(item is None for item in x_0):
-            raise Exception(f'No solution found for any problem: status = {status}. Exiting...')
+        for nb in range(n_batch):  
+            with Pool(params.cpu_num) as p:
 
-        x_data = np.vstack([i for i in x_0 if i is not None])
-        x_traj = [i for i in x_t if i is not None]
-        u_traj = [i for i in u_t if i is not None]
-        b_min = list(b_m)
-        b_max = list(b_M)
+                res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max) for q0, box_min, box_max in \
+                                                      zip(q_init[(nb*sub_batch):((nb+1)*sub_batch)], \
+                                                          box_min_values[(nb*sub_batch):((nb+1)*sub_batch)], \
+                                                          box_max_values[(nb*sub_batch):((nb+1)*sub_batch)])])
 
-        b_min_succ = [b_m[i] for i in range(len(b_m)) if x_0[i] is not None]
-        b_max_succ = [b_M[i] for i in range(len(b_M)) if x_0[i] is not None]
+            x_0, x_t, u_t, b_m, b_M, status, d_list = zip(*res)
+            all_x_0.extend(x_0)
+            all_x_t.extend(x_t)
+            all_u_t.extend(u_t)
+            all_b_m.extend(b_m)
+            all_b_M.extend(b_M)
+            all_status.extend(status)
+            all_d_list.extend(d_list)
 
-        b_combined = np.vstack([np.hstack((b_min_succ[i], b_max_succ[i])) for i in range(len(b_min_succ))])
+            if all(item is None for item in x_0):
+                warnings.warn(f'No solution found for any problem in batch {nb}. Exiting the program.', RuntimeWarning)
+                print(status)
+            if all(item is None for item in all_x_0):
+                warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
+                print(status)
+                exit()
 
-        solved = len(x_data)
-        print('Perc solved/numb of problems: %.2f' % (solved / params.prob_num * 100))
-        print('Total number of points: %d' % len(x_data))
+            x_data = np.vstack([i for i in x_0 if i is not None])
+            x_traj = [i for i in x_t if i is not None]
+            u_traj = [i for i in u_t if i is not None]
+            b_min = list(b_m)
+            b_max = list(b_M)
 
-        np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
-        np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
+            b_min_succ = [b_m[i] for i in range(len(b_m)) if x_0[i] is not None]
+            b_max_succ = [b_M[i] for i in range(len(b_M)) if x_0[i] is not None]
+
+            b_combined = np.vstack([np.hstack((b_min_succ[i], b_max_succ[i])) for i in range(len(b_min_succ))])
+
+            solved = len(x_data)
+            #print('Perc solved/numb of problems in the batch: %.2f' % (len(x_0) / sub_batch * 100))
+            print('Total number of points saved until now: %d' % len(x_data))
+
+            np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
+            np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
+
+        print('Total number of points solved: %d' % len(x_data))
 
         if args['plot']:
 
@@ -409,158 +443,158 @@ def main():
 
             # Start plotting 
             for k in range(len(x_traj)):
+                if k % 5000 == 0 or args['check']:
+                    horizon_ = x_traj[k].shape[0]
+                    colors = np.linspace(0, 1, horizon_)
+                    t = np.linspace(0, horizon_ * params.dt, horizon_)
 
-                horizon_ = x_traj[k].shape[0]
-                colors = np.linspace(0, 1, horizon_)
-                t = np.linspace(0, horizon_ * params.dt, horizon_)
+                    traj_xlim_min = (-b_min[k]).tolist() + [-np.rad2deg(max_phi), -np.rad2deg(max_phi), -180.0]
+                    traj_xlim_max = b_max[k].tolist() + [np.rad2deg(max_phi), np.rad2deg(max_phi), 180.0]
 
-                traj_xlim_min = (-b_min[k]).tolist() + [-np.rad2deg(max_phi), -np.rad2deg(max_phi), -180.0]
-                traj_xlim_max = b_max[k].tolist() + [np.rad2deg(max_phi), np.rad2deg(max_phi), 180.0]
+                    # Plot the trajectory
+                    fig, ax = plt.subplots(2, 3)
+                    ax = ax.reshape(-1)
+                    for i in range(nq):
+                        ax[i].grid(True, linewidth=0.5)
+                        if i < model.npos:
+                            ax[i].scatter(x_traj[k][:, i], x_traj[k][:, nq + i], c=colors, cmap='coolwarm', s=1)
+                        else:
+                            ax[i].scatter(np.rad2deg(x_traj[k][:, i]), np.rad2deg(x_traj[k][:, nq + i]), c=colors, cmap='coolwarm', s=1)
+                        ax[i].set_xlim([traj_xlim_min[i], traj_xlim_max[i]])
+                        ax[i].set_xlabel(f'{pose_label[i]}')
+                        ax[i].set_ylabel(f'{vel_label[i]}')
+                    plt.suptitle(f'Trajectory {k + 1}, d {all_d_list[k][:3]}')
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(traj_dir, f'traj_{k + 1}.png'))
+                    plt.close(fig)
 
-                # Plot the trajectory
-                fig, ax = plt.subplots(2, 3)
-                ax = ax.reshape(-1)
-                for i in range(nq):
-                    ax[i].grid(True, linewidth=0.5)
-                    if i < model.npos:
-                        ax[i].scatter(x_traj[k][:, i], x_traj[k][:, nq + i], c=colors, cmap='coolwarm', s=1)
-                    else:
-                        ax[i].scatter(np.rad2deg(x_traj[k][:, i]), np.rad2deg(x_traj[k][:, nq + i]), c=colors, cmap='coolwarm', s=1)
-                    ax[i].set_xlim([traj_xlim_min[i], traj_xlim_max[i]])
-                    ax[i].set_xlabel(f'{pose_label[i]}')
-                    ax[i].set_ylabel(f'{vel_label[i]}')
-                plt.suptitle(f'Trajectory {k + 1}')
-                plt.tight_layout()
-                plt.savefig(os.path.join(traj_dir, f'traj_{k + 1}.png'))
-                plt.close(fig)
-
-                # Plot pose
-                fig, ax = plt.subplots(3, 1)
-                ax = ax.reshape(-1)
-                j = 0
-                for i in range(nq):
-                    if i == model.npos:
-                        j += 1
+                    # Plot pose
+                    fig, ax = plt.subplots(3, 1)
+                    ax = ax.reshape(-1)
+                    j = 0
+                    for i in range(nq):
+                        if i == model.npos:
+                            j += 1
+                        ax[j].grid(True)
+                        ax[j].set_title(f'{extended_pose_title[j]}')
+                        if i < model.npos:
+                            line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
+                            ellips_r = []
+                            for h in range(len(t)):
+                                ellips_r.append(np.sqrt(normals[i].T @ model.Q(x_traj[k][h, :]) @ normals[i]))
+                            ax[j].plot(t, x_traj[k][:, i] + ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
+                            ax[j].plot(t, x_traj[k][:, i] - ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
+                        else:
+                            line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i]), label=f'{pose_label[i]}')
+                        # ax[j].axhline(traj_xlim_min[i], color=line.get_color(), linestyle='--', linewidth=0.8)
+                        # ax[j].axhline(traj_xlim_max[i], color=line.get_color(), linestyle='--', linewidth=0.8)
+                        ax[j].set_xlabel('Time [s]')
+                        ax[j].set_ylabel(y_lab_pose[j])
+                        ax[j].legend()
+                    j += 1
                     ax[j].grid(True)
                     ax[j].set_title(f'{extended_pose_title[j]}')
-                    if i < model.npos:
-                        line, = ax[j].plot(t, x_traj[k][:, i], label=f'{pose_label[i]}')
-                        ellips_r = []
-                        for h in range(len(t)):
-                            ellips_r.append(np.sqrt(normals[i].T @ model.Q(x_traj[k][h, :]) @ normals[i]))
-                        ax[j].plot(t, x_traj[k][:, i] + ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
-                        ax[j].plot(t, x_traj[k][:, i] - ellips_r, color=line.get_color(), linestyle='--', linewidth=0.8)
-                    else:
-                        line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i]), label=f'{pose_label[i]}')
-                    # ax[j].axhline(traj_xlim_min[i], color=line.get_color(), linestyle='--', linewidth=0.8)
-                    # ax[j].axhline(traj_xlim_max[i], color=line.get_color(), linestyle='--', linewidth=0.8)
+                    line, = ax[j].plot(t, np.rad2deg(np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4]))), label=f'{pose_label[i]}')
+                    # ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
+                    ax[j].axhline(np.rad2deg(max_phi), color=line.get_color(), linestyle='--', linewidth=0.8)
+                    ax[j].axhline(np.rad2deg(model.phi_hovering_max), color='r', linestyle='--', linewidth=0.8)
                     ax[j].set_xlabel('Time [s]')
                     ax[j].set_ylabel(y_lab_pose[j])
                     ax[j].legend()
-                j += 1
-                ax[j].grid(True)
-                ax[j].set_title(f'{extended_pose_title[j]}')
-                line, = ax[j].plot(t, np.rad2deg(np.sqrt(np.square(x_traj[k][:, 3]) + np.square(x_traj[k][:, 4]))), label=f'{pose_label[i]}')
-                # ax[j].axhline(min_phi, color=line.get_color(), linestyle='--', linewidth=0.8)
-                ax[j].axhline(np.rad2deg(max_phi), color=line.get_color(), linestyle='--', linewidth=0.8)
-                ax[j].axhline(np.rad2deg(model.phi_hovering_max), color='r', linestyle='--', linewidth=0.8)
-                ax[j].set_xlabel('Time [s]')
-                ax[j].set_ylabel(y_lab_pose[j])
-                ax[j].legend()
 
-                plt.suptitle(f'Trajectory {k + 1}')
-                plt.tight_layout()
-                plt.savefig(os.path.join(pose_dir, f'pose_{k + 1}.png'))
-                plt.close(fig)
+                    plt.suptitle(f'Trajectory {k + 1}')
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(pose_dir, f'pose_{k + 1}.png'))
+                    plt.close(fig)
 
-                # Plot velocities
-                fig, ax = plt.subplots(2, 1)
-                ax = ax.reshape(-1)
-                j = 0
-                for i in range(nq):
-                    if i == model.npos:
-                        j += 1
-                    ax[j].grid(True)
-                    ax[j].set_title(f'{velocities_title[j]}')
-                    if i < model.npos:
-                        line, = ax[j].plot(t, x_traj[k][:, i + nq], label=f'{vel_label[i]}')
-                    else:
-                        line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i + nq]), label=f'{vel_label[i]}')
-                    ax[j].set_xlabel('Time [s]')
-                    ax[j].set_ylabel(y_lab_vel[j])
-                    ax[j].legend()
-                plt.suptitle(f'Trajectory {k + 1}')
-                plt.tight_layout()
-                plt.savefig(os.path.join(velocity_dir, f'vel_{k + 1}.png'))
-                plt.close(fig)
+                    # Plot velocities
+                    fig, ax = plt.subplots(2, 1)
+                    ax = ax.reshape(-1)
+                    j = 0
+                    for i in range(nq):
+                        if i == model.npos:
+                            j += 1
+                        ax[j].grid(True)
+                        ax[j].set_title(f'{velocities_title[j]}')
+                        if i < model.npos:
+                            line, = ax[j].plot(t, x_traj[k][:, i + nq], label=f'{vel_label[i]}')
+                        else:
+                            line, = ax[j].plot(t, np.rad2deg(x_traj[k][:, i + nq]), label=f'{vel_label[i]}')
+                        ax[j].set_xlabel('Time [s]')
+                        ax[j].set_ylabel(y_lab_vel[j])
+                        ax[j].legend()
+                    plt.suptitle(f'Trajectory {k + 1}')
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(velocity_dir, f'vel_{k + 1}.png'))
+                    plt.close(fig)
 
-                # Plot the input
-                offset = 200;
-                fig, ax = plt.subplots()
-                for i in range(nu):
-                    ax.grid(True)
-                    ax.plot(t, u_traj[k][:, i], label=f'u_{i + 1}')
-                    ax.set_title('Inputs')
-                    ax.axhline(model.u_bar, color='r', linestyle='--', lw=0.8)
-                    ax.set_xlabel('Time [s]')
-                    ax.set_ylabel('$u^2$ [(Hz/s)$^2$]')
-                    ax.set_ylim([0.0 - offset, model.u_bar+offset])
-                    ax.legend()
-                plt.suptitle(f'Trajectory {k + 1}')
-                plt.tight_layout()
-                plt.savefig(os.path.join(input_dir, f'input_{k + 1}.png'))
-                plt.close(fig)
+                    # Plot the input
+                    offset = 200;
+                    fig, ax = plt.subplots()
+                    for i in range(nu):
+                        ax.grid(True)
+                        ax.plot(t, u_traj[k][:, i], label=f'u_{i + 1}')
+                        ax.set_title('Inputs')
+                        ax.axhline(model.u_bar, color='r', linestyle='--', lw=0.8)
+                        ax.set_xlabel('Time [s]')
+                        ax.set_ylabel('$u^2$ [(Hz/s)$^2$]')
+                        ax.set_ylim([0.0 - offset, model.u_bar+offset])
+                        ax.legend()
+                    plt.suptitle(f'Trajectory {k + 1}')
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(input_dir, f'input_{k + 1}.png'))
+                    plt.close(fig)
 
-                # Plot 3D positions
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                sc = ax.scatter(x_traj[k][:, 0], x_traj[k][:, 1], x_traj[k][:, 2], c=colors, cmap='coolwarm', s=10)
-                
-                
-                # Add reference frames every 10th point
-                for i in range(0, len(x_traj[k]), 10):
-                    roll, pitch, yaw = x_traj[k][i,3:6]
-                    rotation_matrix = Rot.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
+                    # Plot 3D positions
+                    fig = plt.figure()
+                    ax = fig.add_subplot(111, projection='3d')
+                    sc = ax.scatter(x_traj[k][:, 0], x_traj[k][:, 1], x_traj[k][:, 2], c=colors, cmap='coolwarm', s=10)
+                    
+                    
+                    # Add reference frames every 10th point
+                    for i in range(0, len(x_traj[k]), 10):
+                        roll, pitch, yaw = x_traj[k][i,3:6]
+                        rotation_matrix = Rot.from_euler('xyz', [roll, pitch, yaw]).as_matrix()
 
-                    # Define the arrow directions (unit vectors in local frame)
-                    # arrow_length = 0.1  # Length of the arrows
-                    # x_arrow = rotation_matrix[:, 0] * arrow_length
-                    # y_arrow = rotation_matrix[:, 1] * arrow_length
-                    # z_arrow = rotation_matrix[:, 2] * arrow_length
-                    x_arrow = rotation_matrix[:, 0] * model.min_width
-                    y_arrow = rotation_matrix[:, 1] * model.min_length
-                    z_arrow = rotation_matrix[:, 2] * model.min_height
+                        # Define the arrow directions (unit vectors in local frame)
+                        # arrow_length = 0.1  # Length of the arrows
+                        # x_arrow = rotation_matrix[:, 0] * arrow_length
+                        # y_arrow = rotation_matrix[:, 1] * arrow_length
+                        # z_arrow = rotation_matrix[:, 2] * arrow_length
+                        x_arrow = rotation_matrix[:, 0] * model.min_width
+                        y_arrow = rotation_matrix[:, 1] * model.min_length
+                        z_arrow = rotation_matrix[:, 2] * model.min_height
 
-                    # Plot the arrows
-                    ax.quiver(
-                        x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],  # Arrow origin
-                        x_arrow[0], x_arrow[1], x_arrow[2], color='b', label='X-axis' if i == 0 else ""
-                    )
-                    ax.quiver(
-                        x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
-                        y_arrow[0], y_arrow[1], y_arrow[2], color='r', label='Y-axis' if i == 0 else ""
-                    )
-                    ax.quiver(
-                        x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
-                        z_arrow[0], z_arrow[1], z_arrow[2], color='g', label='Z-axis' if i == 0 else ""
-                    )
-                            
-                ax.set_xlabel('X [m]')
-                ax.set_ylabel('Y [m]')
-                ax.set_zlabel('Z [m]')
-                ax.set_xlim(traj_xlim_min[0], traj_xlim_max[0])
-                ax.set_ylim(traj_xlim_min[1], traj_xlim_max[1])
-                ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
-                ax.set_title(f'3D Position Trajectory {k + 1}')
-                set_axes_equal(ax)
+                        # Plot the arrows
+                        ax.quiver(
+                            x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],  # Arrow origin
+                            x_arrow[0], x_arrow[1], x_arrow[2], color='b', label='X-axis' if i == 0 else ""
+                        )
+                        ax.quiver(
+                            x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
+                            y_arrow[0], y_arrow[1], y_arrow[2], color='r', label='Y-axis' if i == 0 else ""
+                        )
+                        ax.quiver(
+                            x_traj[k][i,0], x_traj[k][i,1], x_traj[k][i,2],
+                            z_arrow[0], z_arrow[1], z_arrow[2], color='g', label='Z-axis' if i == 0 else ""
+                        )
+                                
+                    ax.set_xlabel('X [m]')
+                    ax.set_ylabel('Y [m]')
+                    ax.set_zlabel('Z [m]')
+                    ax.set_xlim(traj_xlim_min[0], traj_xlim_max[0])
+                    ax.set_ylim(traj_xlim_min[1], traj_xlim_max[1])
+                    ax.set_zlim(traj_xlim_min[2], traj_xlim_max[2])
+                    ax.set_title(f'3D Position Trajectory {k + 1}')
+                    set_axes_equal(ax)
 
-                # Add a colorbar
-                # plt.colorbar(sc, ax=ax, label='Time progression')
+                    # Add a colorbar
+                    # plt.colorbar(sc, ax=ax, label='Time progression')
 
-                # Save the figure
-                plt.tight_layout()
-                plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
-                plt.close(fig)
+                    # Save the figure
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
+                    plt.close(fig)
     
     # histogram of status
     # plt.figure()
@@ -572,6 +606,7 @@ def main():
     # plt.show(block=False)
 
     if args['training']: 
+        vel_considered = 1
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
@@ -588,24 +623,46 @@ def main():
         nbori = nb+model.nori
         nx_train = nbori+model.nv
 
-        nn_model = NeuralNetwork(nx_train, 256, 1, act_fun, ub).to(device)
+        params.nx=nx_train
+        print(f'nx_train {nx_train}')
+        nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)
         loss_fn = torch.nn.MSELoss()
-        # loss_fn = CustomLoss()
+        #loss_fn = RAELoss()
         optimizer = torch.optim.Adam(nn_model.parameters(), 
                                      lr=params.learning_rate,
-                                    #  weight_decay=2e-5,
+                                     weight_decay=2e-5,
                                      amsgrad=True)
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
+
+        if plot:
+            for jj in range(x_data.shape[1]):
+                plt.figure()
+                plt.grid(True, which='both')
+                plt.hist(x_data[:,jj], bins=30, alpha=0.7, color='blue', edgecolor='black')
+                
+                plt.title(f'Histogram x[{jj}]')
+
+                plt.show(block=False) 
 
         # Compute outputs and inputs
         n = len(x_data)
         mean = np.mean(x_data[:, :nbori])
         std = np.std(x_data[:, :nbori])
         x_data[:, :nbori] = (x_data[:, :nbori] - mean) / std
-        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1) 
+        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1)
         for k in range(n):
             if y_data[k] != 0.: 
                 x_data[k, nbori:] /= y_data[k] 
+
+        if plot:
+            for jj in range(x_data.shape[1]):
+                plt.figure()
+                plt.grid(True, which='both')
+                plt.hist(x_data[:,jj], bins=30, alpha=0.7, color='blue', edgecolor='black')
+                
+                plt.title(f'Histogram x[{jj}]')
+
+                plt.show(block=False) 
 
         train_size = int(params.train_ratio * n)
         val_size = int(params.val_ratio * n)
@@ -646,6 +703,8 @@ def main():
         plt.ylabel('MSE Loss (LP filtered)')
         plt.title(f'Training evolution, horizon {N}')
         plt.savefig(params.DATA_DIR + f'evolution_{N}.png')
+
+        plt.show(block=False)
 
         # # Plot the relative (mean) error evolution
         # plt.figure()
@@ -692,6 +751,10 @@ def main():
     seconds = int(elapsed_time % 60)
     print(f'Elapsed time: {hours}:{minutes:2d}:{seconds:2d}')
 
+def normalize_data(data, indexes):   # N_vec * dim_Vec
+    for idx in indexes:
+        data[:,idx] = (data[:,idx]- np.min(data[:,idx]))/(np.max(data[:,idx])-np.min(data[:,idx]))
+    return data
     
 if __name__ == '__main__':
     main()
