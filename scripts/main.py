@@ -240,7 +240,7 @@ def main():
         exit()
     params = Parameters(robotic_system) 
     params.build = args['build']
-    plot = args['plot']
+    params.plot = args['plot']
     act = args['activation']
 
     ### MODEL AND CONTROLLER DEFINITION
@@ -634,7 +634,7 @@ def main():
                                      amsgrad=True)
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
 
-        if plot:
+        if params.plot:
             for jj in range(x_data.shape[1]):
                 plt.figure()
                 plt.grid(True, which='both')
@@ -654,7 +654,7 @@ def main():
             if y_data[k] != 0.: 
                 x_data[k, nbori:] /= y_data[k] 
 
-        if plot:
+        if params.plot:
             for jj in range(x_data.shape[1]):
                 plt.figure()
                 plt.grid(True, which='both')
