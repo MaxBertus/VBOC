@@ -375,14 +375,14 @@ def main():
                 print(status)
                 exit()
 
-            x_data = np.vstack([i for i in x_0 if i is not None])
-            x_traj = [i for i in x_t if i is not None]
-            u_traj = [i for i in u_t if i is not None]
-            b_min = list(b_m)
-            b_max = list(b_M)
+            x_data = np.vstack([i for i in all_x_0 if i is not None])
+            x_traj = [i for i in all_x_t if i is not None]
+            u_traj = [i for i in all_u_t if i is not None]
+            b_min = list(all_b_m)
+            b_max = list(all_b_M)
 
-            b_min_succ = [b_m[i] for i in range(len(b_m)) if x_0[i] is not None]
-            b_max_succ = [b_M[i] for i in range(len(b_M)) if x_0[i] is not None]
+            b_min_succ = [all_b_m[i] for i in range(len(all_b_m)) if all_x_0[i] is not None]
+            b_max_succ = [all_b_M[i] for i in range(len(all_b_M)) if all_x_0[i] is not None]
 
             b_combined = np.vstack([np.hstack((b_min_succ[i], b_max_succ[i])) for i in range(len(b_min_succ))])
 
@@ -392,10 +392,9 @@ def main():
 
             np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
             np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
-
         print('Total number of points solved: %d' % len(x_data))
 
-        if args['plot']:
+        if params.plot:
 
             # Labels and titles
             pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
