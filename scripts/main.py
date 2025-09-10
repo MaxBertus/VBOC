@@ -27,7 +27,7 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
     controller.resetHorizon(N_guess)
 
     # Set velocity direction
-    if args['check']:
+    if params.check:
         d = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
     else:
         #d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
@@ -56,48 +56,62 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
         return None, None, None, box_min_values, box_max_values, status, d
     else:
         return x_star[0], x_star, u_star, box_min_values, box_max_values, status, d
-    
-# def fixedVelocityDir(N_guess, N_increment, n_pts=100 ):  
-#     """ Compute data on section of the viability kernel"""
-#     sec_pts = []
-#     status_list = []
-#     controller.resetHorizon(N_guess)
-#     for i in range(model.nq):
-#         # print('#### DOF n %d ####' % i)
-#         q_grid = np.linspace(model.x_min[i], model.x_max[i], n_pts)
-#         q_grid = np.tile(q_grid, 2)
-#         x_sec = np.empty((0, model.nx)) * np.nan 
-#         status_vec = np.empty(n_pts * 2) * np.nan
-#         for j in range(n_pts * 2):
-#             q_try = (model.x_max[:model.nq] + model.x_min[:model.nq]) / 2
-#             q_try[i] = q_grid[j]
-#             x_try = np.hstack([q_try, np.zeros(model.nq)])
-            
-#             # if not controller.checkCollision(x_try) and params.obs_flag:
-#             #     continue
-#             # x_init = np.vstack([x_init, x_try])
-#             x_guess = np.zeros((N_guess, model.nx))
-#             u_guess = np.zeros((N_guess, model.nu))
-#             x_guess[:, :model.nq] = np.full((N_guess, model.nq), q_try)
 
-#             d = np.zeros(model.nv)
-#             d[i] = 1 if j < n_pts else -1
+def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100):
+    """ Compute data on section of the viability kernel"""
+    sec_pts = []
+    status_list = []
+    controller.resetHorizon(N_guess)
 
-#             controller.setGuess(x_guess, u_guess)
-#             x_star, _, _, status = controller.solveVBOC(q_try, d, N_guess, n=N_increment, repeat=5)
-#             if status == 0:
-#                 x_sec = np.vstack([x_sec, x_star[0]])
-#             # else: 
-#             #     print('Point number %d' % j)
-#             #     controller.ocp_solver.print_statistics()
-#             #     print(controller.ocp_solver.get_stats('residuals'))
-#             #     print('Check collision (false mean collision): ', controller.checkCollision(x_try))
-#             status_vec[j] = status
-#             # else:
-#             #     print(f'No solution found at dof {i}, step {j}, flag: {status}')
-#         sec_pts.append(x_sec)
-#         status_list.append(status_vec)
-#     return sec_pts, status_list
+    for i in range(model.npos):
+        # For each position dof, create a grid of n_pts in the corresponding direction. They have to be transpose to box dimensions
+        q_grid = np.linspace(model.env_dimensions[i], model.env_dimensions[i+model.npos], n_pts)
+        box_max_grid = np.empty(n_pts) * np.nan
+        box_min_grid = np.empty(n_pts) * np.nan
+
+        for k in range(n_pts):
+            box_max_grid[k] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[k])
+            box_min_grid[k] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[k])
+
+        # Duplicate for positive and negative direction
+        box_max_grid = np.tile(box_max_grid, 2) 
+        box_min_grid = np.tile(box_min_grid, 2)
+
+        # Prepare storing variables
+        x_sec = np.empty((0, model.nx)) * np.nan 
+        status_vec = np.empty(n_pts * 2) * np.nan
+        
+        for j in range(n_pts * 2):
+            box_max_values = model.env_dimensions[3:]
+            box_min_values = model.env_dimensions[:3]
+
+            box_max_values[i] = box_max_grid[j]
+            box_min_values[i] = box_min_grid[j]
+
+            # Set initial state in zero
+            q_init = np.zeros(model.nq)             
+            x_guess = np.zeros((N_guess, model.nx))
+            u_guess = np.linalg.pinv(model.R(np.zeros(model.nq)).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
+            u_guess = np.zeros((N_guess, model.nu))
+
+            d = np.zeros(model.nv)
+            d[i] = 1 if j < n_pts else -1
+
+            controller.setGuess(x_guess, u_guess)
+            x_star, _, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=vboc_repeat)
+            if status == 0:
+                x_sec = np.vstack([x_sec, x_star[0]])
+            # else: 
+            #     print('Point number %d' % j)
+            #     controller.ocp_solver.print_statistics()
+            #     print(controller.ocp_solver.get_stats('residuals'))
+            #     print('Check collision (false mean collision): ', controller.checkCollision(x_try))
+            status_vec[j] = status
+            # else:
+            #     print(f'No solution found at dof {i}, step {j}, flag: {status}')
+        sec_pts.append(x_sec)
+        status_list.append(status_vec)
+    return sec_pts, status_list
 
 def generate_constrained_rpy(min_inclination, max_inclination, n_samples):
     """
@@ -226,11 +240,16 @@ class CustomLoss(torch.nn.Module):
         l1_over = torch.mean(torch.relu(y_pred - y_true))
         return self.alpha * l2 + self.beta * l1_over 
     
+def normalize_data(data, indexes):   # N_vec * dim_Vec
+    for idx in indexes:
+        data[:,idx] = (data[:,idx]- np.min(data[:,idx]))/(np.max(data[:,idx])-np.min(data[:,idx]))
+    return data
+
 def main():
     start_time = time.time()
 
-    ### PARSE ARGUMENTS+
-    global args
+    ### PARSE ARGUMENTS
+    global args, params
     args = parse_args()
     robotic_system = args['system']
     available_systems = ['sth']
@@ -241,9 +260,12 @@ def main():
         print('\nSystem not available! Available: ', available_systems, '\n')
         exit()
     params = Parameters(robotic_system) 
+    params.generation = args['generation']
+    params.check = args['check']
     params.build = args['build']
     params.plot = args['plot']
-    act = args['activation']
+    params.training = args['training']
+    params.act = args['activation']
 
     ### MODEL AND CONTROLLER DEFINITION
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -282,11 +304,11 @@ def main():
         'silu': torch.nn.SiLU(),
         'sigm': torch.nn.Sigmoid()
     }
-    act_fun = nls[act]
-    nn_filename = f'{params.NN_DIR}_{act}.pt'
+    act_fun = nls[params.act]
+    nn_filename = f'{params.NN_DIR}{robotic_system}_{params.act}.pt'
     ub = 1
     
-    if args['generation']:
+    if params.generation:
 
         # DATA GENERATION
         # Initial position
@@ -302,14 +324,15 @@ def main():
 
         roll, pitch, yaw = generate_constrained_rpy(min_phi, max_phi, params.prob_num)
 
-        if args['check']:
+        if params.check:
             orient_init = np.zeros((params.prob_num, model.nori))
         else:
             orient_init = np.column_stack([roll, pitch, yaw])
+        
         q_init = np.hstack([pos_init, orient_init])
 
         # Obstacles box
-        if args['check']:
+        if params.check:
             box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
             box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
         else:
@@ -319,9 +342,8 @@ def main():
         print('Start data generation')
 
         all_x_0, all_x_t, all_u_t, all_b_m, all_b_M, all_status, all_d_list = [],[],[],[],[],[],[]
-        # split number of problems in smaller sets, to allow intermediate savings 
         
-        if args['check']:
+        if params.check:
             sub_batch = 1
         else:
             sub_batch = 100
@@ -348,8 +370,9 @@ def main():
             all_d_list.extend(d_list)
 
             if all(item is None for item in x_0):
-                warnings.warn(f'No solution found for any problem in batch {nb}. Exiting the program.', RuntimeWarning)
+                warnings.warn(f'No solution found for any problem in batch {nb}. Skipping batch.', RuntimeWarning)
                 print(status)
+                continue 
             if all(item is None for item in all_x_0):
                 warnings.warn('No solution found for any problem. Exiting the program.', RuntimeWarning)
                 print(status)
@@ -368,26 +391,24 @@ def main():
 
             solved = len(x_data)
             #print('Perc solved/numb of problems in the batch: %.2f' % (len(x_0) / sub_batch * 100))
-            print('Total number of points saved until now: %d' % len(x_data))
+            print(f'Batch {nb}: Total number of points saved until now: %d' % solved)
 
             np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
             np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
-        print('Total number of points solved: %d' % len(x_data))
+
+        print('Total number of points solved: %d' % solved)
 
         if params.plot:
 
             # Labels and titles
-            pose_title = ['x', 'y', 'z', '$\phi$', '\u03B8', '$\gamma$']
             extended_pose_title = ['Position', 'Orientation', 'Inclination']
             velocities_title = ['Linear velocity', 'Angular velocity']
             pose_label = ['x [m]', 'y [m]', 'z [m]', 'r [deg]', 'p [deg]', 'y [deg]']
-            pose_legend = ['x', 'y', 'z', 'r', 'p', 'y']
             vel_label = ['v$_x$ [m/s]', 'v$_y$ [m/s]', 'v$_z$ [m/s]', '$\omega_x$ [deg/s]', '$\omega_y$ [deg/s]', '$\omega_z$ [deg/s]']
-            vel_legend = ['v$_x$', 'v$_y$', 'v$_z$', '$\omega_x$', '$\omega_y$', '$\omega_z$']
             y_lab_pose = ['Pos. [m]', 'Orient. [deg]', 'Incl. [deg]']
             y_lab_vel = ['v [m/s]', '$\omega$ [deg/s]']
 
-            plots_dir = os.path.join(params.DATA_DIR, 'plots')
+            plots_dir = params.PLOTS_DIR
 
             # Clear the entire data directory
             if os.path.exists(plots_dir):
@@ -397,7 +418,6 @@ def main():
                         shutil.rmtree(file_path)  # Remove directories
                     else:
                         os.remove(file_path)  # Remove files
-                # pass
             else:
                 os.makedirs(plots_dir)
 
@@ -416,8 +436,13 @@ def main():
             os.makedirs(threeD_dir, exist_ok=True)
 
             # Start plotting 
+            if params.check:
+                sub_plot = 1
+            else:
+                sub_plot = params.prob_num / 10
+
             for k in range(len(x_traj)):
-                if k % 50 == 0 or args['check']:
+                if k % sub_plot == 0:
                     horizon_ = x_traj[k].shape[0]
                     colors = np.linspace(0, 1, horizon_)
                     t = np.linspace(0, horizon_ * params.dt, horizon_)
@@ -561,27 +586,14 @@ def main():
                     plt.tight_layout()
                     plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
                     plt.close(fig)
-    
-    # histogram of status
-    # plt.figure()
-    # plt.hist(status, bins=[0, 1, 2, 3, 4, 5], edgecolor='black', align='left', rwidth=0.8)
-    # plt.title('Histogram of status flags')
-    # plt.xlabel('Flag')
-    # plt.ylabel('Frequency')
-    # plt.xticks(range(5))
-    # plt.show(block=False)
 
-    if args['training']: 
-        vel_considered = 1
+
+    if params.training: 
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
-
-        # permutation = np.random.permutation(len(x_data))
-        # x_data = x_data[permutation]
-        # b_data = b_data[permutation]
         
-        # Remove positions and stack box dimension
+        # Remove positions and stack box dimensions in x_data
         x_data = np.hstack((b_data, x_data[:, 3:]))
         np.random.shuffle(x_data)
 
@@ -589,28 +601,25 @@ def main():
         nbori = nb+model.nori            
         nx_train = nbori+model.nv
 
-        params.nx=nx_train
-        print(f'nx_train {nx_train}')
         nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)
         loss_fn = torch.nn.MSELoss()
-        #loss_fn = RAELoss()
+
         optimizer = torch.optim.Adam(nn_model.parameters(), 
                                      lr=params.learning_rate,
                                      weight_decay=2e-5,
                                      amsgrad=True)
+        
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
 
         if params.plot:
-            for jj in range(x_data.shape[1]):
+            for j in range(x_data.shape[1]):
                 plt.figure()
                 plt.grid(True, which='both')
-                plt.hist(x_data[:,jj], bins=30, alpha=0.7, color='blue', edgecolor='black')
-                
-                plt.title(f'Histogram x[{jj}]')
+                plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
+                plt.title(f'Histogram x[{j}]')
+                plt.show(block=False) 
 
-                plt.show() 
-
-        # Compute outputs and inputs
+        # Compute inputs (standardized box dimensions and initial orientation + normalized velocities) and outputs (normalized velocities)
         n = len(x_data)
         mean = np.mean(x_data[:, :nbori])
         std = np.std(x_data[:, :nbori])
@@ -621,14 +630,14 @@ def main():
                 x_data[k, nbori:] /= y_data[k] 
 
         if params.plot:
-            for jj in range(x_data.shape[1]):
+            for j in range(x_data.shape[1]):
                 plt.figure()
                 plt.grid(True, which='both')
-                plt.hist(x_data[:,jj], bins=30, alpha=0.7, color='blue', edgecolor='black')
-                
-                plt.title(f'Histogram x[{jj}]')
+                plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
+                plt.title(f'Histogram x[{j}] - standardized and normalized')
+                plt.show(block=False)
 
-                plt.show() 
+        pause = input('Press Enter to continue with training...')
 
         train_size = int(params.train_ratio * n)
         val_size = int(params.val_ratio * n)
@@ -637,6 +646,8 @@ def main():
         x_data = torch.Tensor(x_data).to(device)
         y_data = torch.Tensor(y_data).to(device)
         x_train_val, y_train_val = x_data[:-test_size], y_data[:-test_size]
+        x_test, y_test = x_data[-test_size:], y_data[-test_size:]
+
         print('Start training\n')
         train_evol, val_evol = regressor.training(x_train_val, y_train_val, 
                                                   train_size, args['epochs'], refine=False)
@@ -646,14 +657,12 @@ def main():
         rmse_train, rel_err = regressor.testing(x_train_val, y_train_val)
         print(f'RMSE on Training data: {rmse_train:.5f}')
         print(f'Maximum error wrt training data: {torch.max(rel_err).item():.5f}')
-        x_test, y_test = x_data[-test_size:], y_data[-test_size:]
+        
         rmse_test, rel_err = regressor.testing(x_test, y_test)
         print('---')
         print(f'RMSE on Test data: {rmse_test:.5f}')
-        print(f'Mean and std of the relative error: {torch.mean(rel_err).item()*100:.2f}% +/- {torch.std(rel_err).item()*100:.2f}%')
-        print(f'99 % of the data has a relative error lower than: {torch.quantile(rel_err, 0.99).item()*100:.2f}%')
-        print(f'Maximum relative error wrt test data: {torch.max(rel_err).item()*100:.2f}%')
-        print(f'Minimum relative error wrt test data: {torch.min(rel_err).item()*100:.2f}%')
+        print(f'99 % of the data has a relative error lower than: {torch.quantile(rel_err, 0.99).item():.5f}%')
+        print(f'Maximum relative error wrt test data: {torch.max(rel_err).item():.5f}')
         print('*---*---*---*\n')
 
         # Save the model
@@ -670,57 +679,37 @@ def main():
         plt.title(f'Training evolution, horizon {N}')
         plt.savefig(params.DATA_DIR + f'evolution_{N}.png')
 
-        plt.show()
-
-        # # Plot the relative (mean) error evolution
-        # plt.figure()
-        # plt.grid(True, which='both')
-        # plt.semilogy(err_evol, label='Rel Error', c='b', lw=2)
-        # plt.legend()
-        # plt.xlabel('Epochs')
-        # plt.ylabel('Relative Error')
-        # plt.title(f'Relative error evolution, horizon {N}')
-        # plt.savefig(params.DATA_DIR + f'error_{N}.png')
-
-        # # Box plot of the relative error
-        # plt.figure()
-        # plt.boxplot(rel_err.cpu().numpy(), notch=True)
-        # plt.title('Box plot of the relative error')
-        # plt.xlabel('Test data')
-        # plt.ylabel('Relative error')
-        # plt.savefig(params.DATA_DIR + 'boxplot.png')
-
-        # # Difference between predicted and true values
-        # with torch.no_grad():
-        #     nn_model.eval()
-        #     y_pred = nn_model(x_test).cpu().numpy()
-        # plt.figure()
-        # plt.plot(y_pred - y_test.cpu().numpy())
-        # plt.xlabel('Test data')
-        # plt.ylabel('Output')
-        # plt.savefig(params.DATA_DIR + 'difference.png')
-
+        plt.show(block=False)
+    
     # PLOT THE VIABILITY KERNEL
-    # if args['plot']: 
-    #     nn_data = torch.load(nn_filename)
-    #     nn_model = NeuralNetwork(model.nx, 256, 1, act_fun, ub)
-    #     nn_model.load_state_dict(nn_data['model'])
+    if params.plot: 
+        # Load the data
+        x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
+        b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
+        
+        # Remove positions and stack box dimensions in x_data
+        x_data = np.hstack((b_data, x_data[:, 3:]))
+        np.random.shuffle(x_data)
 
-    #     print('Generate fixed velocity direction points on a grid')
-    #     x_fixed, x_status = fixedVelocityDir(N, n_pts=100)
-    #     plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
-    #     plt.show()
+        # Load the neural network model
+        nb = b_data.shape[1]             
+        nbori = nb+model.nori            
+        nx_train = nbori+model.nv
+
+        nn_data = torch.load(nn_filename)
+        nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)        
+        nn_model.load_state_dict(nn_data['model'])
+
+        print('Generate fixed velocity direction points on a grid')
+        x_fixed, x_status = fixedVelocityDir(N, n_pts=100)
+        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
+        plt.show(block=False)
 
     elapsed_time = time.time() - start_time
     hours = int(elapsed_time // 3600)
     minutes = int((elapsed_time % 3600) // 60)
     seconds = int(elapsed_time % 60)
     print(f'Elapsed time: {hours}:{minutes:2d}:{seconds:2d}')
-
-def normalize_data(data, indexes):   # N_vec * dim_Vec
-    for idx in indexes:
-        data[:,idx] = (data[:,idx]- np.min(data[:,idx]))/(np.max(data[:,idx])-np.min(data[:,idx]))
-    return data
     
 if __name__ == '__main__':
     main()

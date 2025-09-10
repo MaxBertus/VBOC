@@ -33,6 +33,7 @@ class Parameters:
         self.ROOT_DIR = os.path.join(self.PKG_DIR, '../..')
         self.CONF_DIR = os.path.join(self.ROOT_DIR, 'config/')
         self.DATA_DIR = os.path.join(self.ROOT_DIR, 'data/')
+        self.PLOTS_DIR = os.path.join(self.ROOT_DIR, 'plots/')
         self.GEN_DIR = os.path.join(self.ROOT_DIR, 'generated/')
         self.NN_DIR = os.path.join(self.ROOT_DIR, 'nn_models/' + robot_name + '/')
 

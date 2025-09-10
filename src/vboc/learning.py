@@ -170,7 +170,6 @@ class RegressionNN:
         progress_bar.close()
         return loss_evol_train, loss_evol_val
 
-
     def validation(self, x_val, y_val):
         """ Compute the loss wrt to validation data. """
         x_batches = torch.split(x_val, self.batch_size)
@@ -298,8 +297,7 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
         for i in range(nq):
             plt.figure()
 
-            q, v = np.meshgrid(np.arange(model.x_min[i], model.x_max[i] + grid, grid),
-                               np.arange(model.x_min[i + nq], model.x_max[i + nq] + grid, grid))
+            q, v = np.meshgrid(np.arange(model.x_min[i], model.x_max[i] + grid, grid), np.arange(model.x_min[i + nq], model.x_max[i + nq] + grid, grid))
             q_rav, v_rav = q.ravel(), v.ravel()
             n = len(q_rav)
 
@@ -335,20 +333,20 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
             # plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
             # Remove the joint positions s.t. robot collides with obstacles 
-            if params.obs_flag:
-                pts = np.empty(0)
-                for j in range(len(x)):
-                    if not controller.checkCollision(x[j]):
-                        pts = np.append(pts, x[j, i])
-                if len(pts) > 0:
-                    # plt.axvline(np.min(pts), color='blueviolet', linewidth=1.5)
-                    # plt.axvline(np.max(pts), color='black', linewidth=1.5)
+            # if params.obs_flag:
+            #     pts = np.empty(0)
+            #     for j in range(len(x)):
+            #         if not controller.checkCollision(x[j]):
+            #             pts = np.append(pts, x[j, i])
+            #     if len(pts) > 0:
+            #         # plt.axvline(np.min(pts), color='blueviolet', linewidth=1.5)
+            #         # plt.axvline(np.max(pts), color='black', linewidth=1.5)
 
-                    origin = (np.min(pts), model.x_min[i + nq])
-                    width = np.max(pts) - np.min(pts)
-                    height = model.x_max[i + nq] - model.x_min[i + nq]
-                    rect = patches.Rectangle(origin, width, height, linewidth=1, edgecolor='black', facecolor='black')
-                    plt.gca().add_patch(rect)
+            #         origin = (np.min(pts), model.x_min[i + nq])
+            #         width = np.max(pts) - np.min(pts)
+            #         height = model.x_max[i + nq] - model.x_min[i + nq]
+            #         rect = patches.Rectangle(origin, width, height, linewidth=1, edgecolor='black', facecolor='black')
+            #         plt.gca().add_patch(rect)
 
             plt.xlim([model.x_min[i], model.x_max[i]])
             plt.ylim([model.x_min[i + nq], model.x_max[i + nq]])
