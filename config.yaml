@@ -1,5 +1,5 @@
 # Solver Parameters
-prob_num: 50000          # number of OCP to create dataset
+prob_num: 1          # number of OCP to create dataset
 cpu_num: 26
 
 N: 50                   # horizon in number of samples
@@ -47,6 +47,9 @@ min_height: 0.2   # height/2 of the platform [m]
 max_width: 1 # max width/2 of the environment [m]
 max_length: 1 # max length/2 of the environment [m]
 max_height: 1 # min width/2 of the environment [m]
+
+v_min: [-5, -5, -6, -12.2, -12.2, -12.2]  # min initial velocity [m/s, rad/s]  for box dimensions 1x1x1
+v_max: [5, 5, 6, 12.2, 12.2, 12.2]       # max initial velocity [m/s, rad/s] for box dimensions 1x1x1
 
 # Data generation
 orient_g_rej: true # select orientation with gravity rejection

@@ -85,4 +85,7 @@ class Parameters:
         self.max_length = float(parameters['max_length'])
         self.max_height = float(parameters['max_height'])
 
+        self.v_min = np.array(parameters['v_min'])
+        self.v_max = np.array(parameters['v_max'])
+
         self.orient_g_rej = bool(parameters['orient_g_rej'])

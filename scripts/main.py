@@ -28,14 +28,13 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
 
     # Set velocity direction
     if params.check:
-        d = np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+        d = np.array([0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
     else:
         #d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
         d = np.array([np.random.normal() for _ in range(model.nv)])
 
     # Set the initial guess
     x_guess = np.zeros((N_guess, model.nx))
-    #u_guess = np.zeros((N_guess, model.nu))  # NOTE: without gravity compensation
     u_guess = np.linalg.pinv(model.R(np.hstack((q_init, np.zeros(model.nx-model.nq)))).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
     u_guess = np.full((N_guess, model.nu), u_guess)
 
@@ -74,16 +73,20 @@ def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100):
             box_min_grid[k] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[k])
 
         # Duplicate for positive and negative direction
+        q_grid = np.tile(q_grid, 2)
         box_max_grid = np.tile(box_max_grid, 2) 
         box_min_grid = np.tile(box_min_grid, 2)
 
-        # Prepare storing variables
+        # Prepare storing variables 
         x_sec = np.empty((0, model.nx)) * np.nan 
         status_vec = np.empty(n_pts * 2) * np.nan
         
-        for j in range(n_pts * 2):
-            box_max_values = model.env_dimensions[3:]
-            box_min_values = model.env_dimensions[:3]
+
+        #for j in range(n_pts * 2):
+        for j in tqdm(range(n_pts * 2), desc=f"DOF {i+1}/{model.npos}"):
+            
+            box_max_values = model.env_dimensions[3:].copy()
+            box_min_values = model.env_dimensions[:3].copy()
 
             box_max_values[i] = box_max_grid[j]
             box_min_values[i] = box_min_grid[j]
@@ -91,8 +94,8 @@ def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100):
             # Set initial state in zero
             q_init = np.zeros(model.nq)             
             x_guess = np.zeros((N_guess, model.nx))
-            u_guess = np.linalg.pinv(model.R(np.zeros(model.nq)).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
-            u_guess = np.zeros((N_guess, model.nu))
+            u_guess = np.linalg.pinv(model.R(np.zeros(model.nx)).full() @ model.F) @ np.array([0, 0, model.mass * model.g])
+            u_guess = np.full((N_guess, model.nu), u_guess)
 
             d = np.zeros(model.nv)
             d[i] = 1 if j < n_pts else -1
@@ -100,15 +103,12 @@ def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100):
             controller.setGuess(x_guess, u_guess)
             x_star, _, _, status = controller.solveVBOC(q_init, d, box_min_values, box_max_values, N_guess, n=N_increment, repeat=vboc_repeat)
             if status == 0:
+                # Substitute the position dof with the grid value
+                x_star[0, i] = q_grid[j]
                 x_sec = np.vstack([x_sec, x_star[0]])
-            # else: 
-            #     print('Point number %d' % j)
-            #     controller.ocp_solver.print_statistics()
-            #     print(controller.ocp_solver.get_stats('residuals'))
-            #     print('Check collision (false mean collision): ', controller.checkCollision(x_try))
+
             status_vec[j] = status
-            # else:
-            #     print(f'No solution found at dof {i}, step {j}, flag: {status}')
+
         sec_pts.append(x_sec)
         status_list.append(status_vec)
     return sec_pts, status_list
@@ -333,8 +333,8 @@ def main():
 
         # Obstacles box
         if params.check:
-            box_min_values = np.array([model.env_dimensions[:3] for _ in range(params.prob_num)])
-            box_max_values = np.array([model.env_dimensions[3:] for _ in range(params.prob_num)])
+            box_min_values = np.array([model.env_dimensions[:3].copy() for _ in range(params.prob_num)])
+            box_max_values = np.array([model.env_dimensions[3:].copy() for _ in range(params.prob_num)])
         else:
             box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
             box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
@@ -523,7 +523,7 @@ def main():
                     plt.close(fig)
 
                     # Plot the input
-                    offset = 200;
+                    offset = 200
                     fig, ax = plt.subplots()
                     for i in range(nu):
                         ax.grid(True)
@@ -587,7 +587,6 @@ def main():
                     plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
                     plt.close(fig)
 
-
     if params.training: 
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
@@ -611,13 +610,13 @@ def main():
         
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
 
-        if params.plot:
-            for j in range(x_data.shape[1]):
-                plt.figure()
-                plt.grid(True, which='both')
-                plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
-                plt.title(f'Histogram x[{j}]')
-                plt.show(block=False) 
+        # if params.plot:
+        #     for j in range(x_data.shape[1]):
+        #         plt.figure()
+        #         plt.grid(True, which='both')
+        #         plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
+        #         plt.title(f'Histogram x[{j}]')
+        #         plt.show(block=False) 
 
         # Compute inputs (standardized box dimensions and initial orientation + normalized velocities) and outputs (normalized velocities)
         n = len(x_data)
@@ -686,7 +685,7 @@ def main():
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
-        
+
         # Remove positions and stack box dimensions in x_data
         x_data = np.hstack((b_data, x_data[:, 3:]))
         np.random.shuffle(x_data)
@@ -701,7 +700,7 @@ def main():
         nn_model.load_state_dict(nn_data['model'])
 
         print('Generate fixed velocity direction points on a grid')
-        x_fixed, x_status = fixedVelocityDir(N, n_pts=100)
+        x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=20)
         plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
         plt.show(block=False)
 
@@ -710,6 +709,8 @@ def main():
     minutes = int((elapsed_time % 3600) // 60)
     seconds = int(elapsed_time % 60)
     print(f'Elapsed time: {hours}:{minutes:2d}:{seconds:2d}')
+
+    os.system('aplay /home/maxbertus/Music/notification.wav > /dev/null 2>&1')
     
 if __name__ == '__main__':
     main()

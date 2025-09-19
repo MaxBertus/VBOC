@@ -26,6 +26,8 @@ class Model:
         self.max_width = params.max_width
         self.max_length = params.max_length
         self.max_height = params.max_height
+        self.v_min = params.v_min
+        self.v_max = params.v_max
         self.eps = params.state_tol
 
         nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 

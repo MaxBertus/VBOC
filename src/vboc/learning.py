@@ -1,4 +1,5 @@
 import random
+from xml.parsers.expat import model
 import numpy as np
 import torch
 import torch.nn as nn
@@ -290,39 +291,54 @@ class RegressionNN:
 
 def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts, grid=1e-2):
     """ Plot the Backward Reachable Set. """
-
-    nq = model.nq
+    npos = model.npos
     color_map = ['green', 'red', 'orange', 'blue', 'purple']
+
     with torch.no_grad():
-        for i in range(nq):
+        for i in range(npos):
             plt.figure()
 
-            q, v = np.meshgrid(np.arange(model.x_min[i], model.x_max[i] + grid, grid), np.arange(model.x_min[i + nq], model.x_max[i + nq] + grid, grid))
+            q_grid = np.arange(model.env_dimensions[i], model.env_dimensions[i+model.npos] +  grid, grid)
+            v_grid = np.arange(model.v_min[i], model.v_max[i] + grid, grid)
+            box_max_grid = np.empty(len(q_grid)) * np.nan
+            box_min_grid = np.empty(len(q_grid)) * np.nan
+
+            for j in range(len(q_grid)):
+                box_max_grid[j] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[j])
+                box_min_grid[j] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
+
+            box_max_grid = np.tile(box_max_grid, len(v_grid))
+            box_min_grid = np.tile(box_min_grid, len(v_grid))
+
+            q, v = np.meshgrid(q_grid, v_grid)
             q_rav, v_rav = q.ravel(), v.ravel()
             n = len(q_rav)
 
-            x_static = (model.x_max + model.x_min) / 2
+            nbori = 2*model.npos + model.nori
+            x_static = np.zeros(nbori + model.nv)
             x = np.repeat(x_static.reshape(1, len(x_static)), n, axis=0)
-            x[:, i] = q_rav
-            x[:, nq + i] = v_rav
+            x[:, i] = box_min_grid
+            x[:,model.npos + i] = box_max_grid
+            x[:, nbori + i] = v_rav
 
             # Compute velocity norm
-            y = np.linalg.norm(x[:, nq:], axis=1)
+            y = np.linalg.norm(x[:, nbori:], axis=1)
 
             x_in = np.copy(x)
             # Normalize position
-            x_in[:, :nq] = (x[:, :nq] - mean) / std
+            x_in[:, :nbori] = (x[:, :nbori] - mean) / std
             # Velocity direction
-            x_in[:, nq:] /= y.reshape(len(y), 1)
+            x_in[:, nbori:] /= y.reshape(len(y), 1)
 
             # Predict
-            y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32))).cpu().numpy()
+            device = next(nn_model.parameters()).device  # get model device
+            y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32)).to(device)).cpu().numpy()
             out = np.array([0 if y[j] > y_pred[j] else 1 for j in range(n)])
             z = out.reshape(q.shape)
             plt.contourf(q, v, z, cmap='coolwarm', alpha=0.8)
 
             # Plot of the viable samples
-            plt.scatter(dataset[i][:, i], dataset[i][:, nq + i], color='darkgreen', s=12)
+            plt.scatter(dataset[i][:, i], dataset[i][:, model.nq + i], color='darkgreen', s=12)
 
             # # Plot of the viable samples
             # status = status_pts[i]
@@ -348,10 +364,11 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
             #         rect = patches.Rectangle(origin, width, height, linewidth=1, edgecolor='black', facecolor='black')
             #         plt.gca().add_patch(rect)
 
-            plt.xlim([model.x_min[i], model.x_max[i]])
-            plt.ylim([model.x_min[i + nq], model.x_max[i + nq]])
-            plt.xlabel('q_' + str(i + 1))
-            plt.ylabel('dq_' + str(i + 1))
+            plt.xlim([model.env_dimensions[i], model.env_dimensions[i+3]])
+            print(f"Environment dimensions {model.env_dimensions}")
+            plt.ylim([model.v_min[i], model.v_max[i]])
+            plt.xlabel('pos_' + str(i + 1))
+            plt.ylabel('vel_' + str(i + 1))
             plt.grid()
-            plt.title(f"Classifier section joint {i + 1}, horizon {controller.N}")
-            plt.savefig(params.DATA_DIR + f'{i + 1}dof_{controller.N}_BRS.png')
+            plt.title(f"Classifier section position {i + 1}, horizon {controller.N}")
+            plt.savefig(params.DATA_DIR + f'{i + 1}_pos_{controller.N}_BRS.png')
