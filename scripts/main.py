@@ -587,6 +587,21 @@ def main():
                     plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
                     plt.close(fig)
 
+    # ERASE: PLOT HISTOGRAMS OF RAW DATA -------------------------------------------
+
+    x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
+    b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
+
+    for j in range(b_data.shape[1]):
+        plt.figure()
+        plt.grid(True, which='both')
+        plt.hist(b_data[:,j], bins=60, alpha=0.7, color='blue', edgecolor='black')
+        plt.title(f'Histogram b[{j}]')
+        plt.show(block=True)
+
+    # ERASE: end -------------------------------------------------------------------
+
+
     if params.training: 
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
@@ -700,7 +715,13 @@ def main():
         nn_model.load_state_dict(nn_data['model'])
 
         print('Generate fixed velocity direction points on a grid')
-        x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=20)
+        if not os.path.exists(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc.npy'):
+            x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=2)
+            np.save(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc', x_fixed, allow_pickle=True)
+            np.save(f'{params.DATA_DIR}{robotic_system}_x_status_vboc', x_status, allow_pickle=True)
+        else:
+            x_fixed = np.load(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc.npy', allow_pickle=True)
+            x_status = np.load(f'{params.DATA_DIR}{robotic_system}_x_status_vboc.npy', allow_pickle=True)
         plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
         plt.show(block=False)
 
