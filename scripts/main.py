@@ -383,18 +383,26 @@ def main():
             u_traj = [i for i in all_u_t if i is not None]
             b_min = list(all_b_m)
             b_max = list(all_b_M)
+            d = list(all_d_list)
+            status = list(all_status)
+
+            b_combined = np.vstack([np.hstack((b_min[i], b_max[i])) for i in range(len(b_min))])
+
+            np.save(f'{params.DATA_DIR}{robotic_system}_d_vboc', d)
+            np.save(f'{params.DATA_DIR}{robotic_system}_b_all_vboc', b_combined)
+            np.save(f'{params.DATA_DIR}{robotic_system}_status_vboc', status)
 
             b_min_succ = [all_b_m[i] for i in range(len(all_b_m)) if all_x_0[i] is not None]
             b_max_succ = [all_b_M[i] for i in range(len(all_b_M)) if all_x_0[i] is not None]
 
-            b_combined = np.vstack([np.hstack((b_min_succ[i], b_max_succ[i])) for i in range(len(b_min_succ))])
+            b_combined_succ = np.vstack([np.hstack((b_min_succ[i], b_max_succ[i])) for i in range(len(b_min_succ))])
 
             solved = len(x_data)
             #print('Perc solved/numb of problems in the batch: %.2f' % (len(x_0) / sub_batch * 100))
             print(f'Batch {nb}: Total number of points saved until now: %d' % solved)
 
             np.save(f'{params.DATA_DIR}{robotic_system}_x_vboc', x_data)
-            np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined)
+            np.save(f'{params.DATA_DIR}{robotic_system}_b_vboc', b_combined_succ)
 
         print('Total number of points solved: %d' % solved)
 
@@ -589,15 +597,15 @@ def main():
 
     # ERASE: PLOT HISTOGRAMS OF RAW DATA -------------------------------------------
 
-    x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
-    b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
+    # x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
+    # b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
 
-    for j in range(b_data.shape[1]):
-        plt.figure()
-        plt.grid(True, which='both')
-        plt.hist(b_data[:,j], bins=60, alpha=0.7, color='blue', edgecolor='black')
-        plt.title(f'Histogram b[{j}]')
-        plt.show(block=True)
+    # for j in range(b_data.shape[1]):
+    #     plt.figure()
+    #     plt.grid(True, which='both')
+    #     plt.hist(b_data[:,j], bins=60, alpha=0.7, color='blue', edgecolor='black')
+    #     plt.title(f'Histogram b[{j}]')
+    #     plt.show(block=True)
 
     # ERASE: end -------------------------------------------------------------------
 
