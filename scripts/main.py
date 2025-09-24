@@ -22,7 +22,7 @@ install()
 
 progress_var = Value('i', 0)
 
-def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values):
+def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values,randomSeed):
     global progress_var
     controller.resetHorizon(N_guess)
 
@@ -31,6 +31,7 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
         d = np.array([0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
     else:
         #d = np.array([random.uniform(-1, 1) for _ in range(model.nv)])
+        np.random.seed(randomSeed)
         d = np.array([np.random.normal() for _ in range(model.nv)])
 
     # Set the initial guess
@@ -339,6 +340,8 @@ def main():
             box_min_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[:3]) for _ in range(params.prob_num)])
             box_max_values = np.array([np.random.uniform([0.0, 0.0, 0.0], model.env_dimensions[3:]) for _ in range(params.prob_num)])
 
+        randomSeeds = [random.randint(0, params.prob_num) for _ in range(params.prob_num)]
+
         print('Start data generation')
 
         all_x_0, all_x_t, all_u_t, all_b_m, all_b_M, all_status, all_d_list = [],[],[],[],[],[],[]
@@ -355,10 +358,11 @@ def main():
         for nb in range(n_batch):  
             with Pool(params.cpu_num) as p:
 
-                res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max) for q0, box_min, box_max in \
+                res = p.starmap(computeDataOnBorder, [(q0, N, N_increment, vboc_repeat, box_min, box_max, randomSeed) for q0, box_min, box_max, randomSeed in \
                                                       zip(q_init[(nb*sub_batch):((nb+1)*sub_batch)], \
                                                           box_min_values[(nb*sub_batch):((nb+1)*sub_batch)], \
-                                                          box_max_values[(nb*sub_batch):((nb+1)*sub_batch)])])
+                                                          box_max_values[(nb*sub_batch):((nb+1)*sub_batch)], \
+                                                          randomSeeds[(nb*sub_batch):((nb+1)*sub_batch)])])
 
             x_0, x_t, u_t, b_m, b_M, status, d_list = zip(*res)
             all_x_0.extend(x_0)

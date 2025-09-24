@@ -14,6 +14,7 @@ class ViabilityController(AbstractController):
             self.ocp_solver.set(i, 'x', self.x_guess[i])
             self.ocp_solver.set(i, 'u', self.u_guess[i])
             self.ocp_solver.set(i, 'p', d)
+            
             if i != 0: # and i != self.N-1:
                 # self.ocp_solver.constraints_set(i, "lbx", np.hstack([box_min_values, np.full(self.model.nori, -np.pi)]))
                 # self.ocp_solver.constraints_set(i, "ubx", np.hstack([box_max_values, np.full(self.model.nori, np.pi)]))
@@ -36,8 +37,6 @@ class ViabilityController(AbstractController):
         self.ocp_solver.constraints_set(0, "ubx", q_init)
         # print("lbx", q_init_lb)
         # print("ubx", q_init_ub)
-
-        
 
         # x_terminal = self.ocp_solver.get(self.N, "x")
         # x_initial = self.ocp_solver.get(0, "x")
