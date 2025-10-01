@@ -31,7 +31,6 @@ def plot_histogram(data, title="Histogram", xlabel="Value", ylabel="Frequency", 
         axes[i].set_xlabel(xlabel)
         axes[i].set_ylabel(ylabel)
         axes[i].grid(True, which='both', alpha=0.75)
-    plt.show(block=False)
 
     plt.savefig( os.path.join(debug_dir, title + ".png"))
 
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     # Generate paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.join(script_dir, '..')
-    data_dir = os.path.join(root_dir, 'extraData/')
+    data_dir = os.path.join(root_dir, 'extraData-corrected/')
     debug_dir = os.path.join(root_dir, 'debug/')
 
     x_data = np.load(data_dir + 'sth_x_vboc.npy')
@@ -56,3 +55,8 @@ if __name__ == "__main__":
     plot_histogram(b_all_data, title="b_all", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=debug_dir)
     plot_histogram(-d_data, title="d", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=debug_dir)
     plot_histogram(status_data, title="status", xlabel="Value", ylabel="Frequency", bins=10, saving_dir=debug_dir)
+
+    success = 0
+    for i in range(status_data.shape[0]):
+        success = success+1 if status_data[i]==0 else success
+    print(f"Success rate: {success/status_data.shape[0]*100:.2f}%")

@@ -1,19 +1,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
+from tqdm import tqdm
 import time
 
 def generate_direction(n):
     # np.random.seed(n)
     d = np.array([np.random.normal() for _ in range(6)])
     d /= np.linalg.norm(d)
-    time.sleep(0.5)  # Simulate some delay
+    time.sleep(0.1)  # Simulate some delay
     return d
 
 
 def main():
 
-    n = 5000
+    n = 200000
+    sub_batch = 100
     d = np.empty((n,6)) * np.nan
 
     for i in range(n):
@@ -33,8 +35,11 @@ def main():
         axes[i].set_ylabel("Frequency")
         axes[i].grid(True, which='both', alpha=0.75)
 
-    with Pool(26) as pool:
-        d_pool = pool.map(generate_direction, range(n))
+    n_batch = n // sub_batch
+
+    for nb in tqdm(range(n_batch)):
+        with Pool(26) as pool:
+            d_pool = pool.map(generate_direction, range(nb * sub_batch, (nb + 1) * sub_batch))
 
     d_pool = np.array(d_pool)
 

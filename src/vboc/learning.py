@@ -365,7 +365,6 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
             #         plt.gca().add_patch(rect)
 
             plt.xlim([model.env_dimensions[i], model.env_dimensions[i+3]])
-            print(f"Environment dimensions {model.env_dimensions}")
             plt.ylim([model.v_min[i], model.v_max[i]])
             plt.xlabel('pos_' + str(i + 1))
             plt.ylabel('vel_' + str(i + 1))
