@@ -19,7 +19,7 @@ def plot_histogram(data, title="Histogram", xlabel="Value", ylabel="Frequency", 
     fig.suptitle(title)
     axes = axes.flatten()
     for i in range(len(axes)):
-        axes[i].set_visible(False)  # Hide all subplots initially
+        axes[i].set_visible(False) 
 
     if len(data.shape) == 1:
         data = data.reshape(-1, 1)

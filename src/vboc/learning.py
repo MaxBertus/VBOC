@@ -104,7 +104,7 @@ class RegressionNN:
         self.beta = params.beta
         self.batch_size = params.batch_size
         self.plot_train = params.plot
-        self.data_dir = params.DATA_DIR
+        self.plot_dir = params.PLOTS_DIR
 
     def training(self, x_train_val, y_train_val, split, epochs, refine=False):
         """ Training of the neural network. """
@@ -232,11 +232,8 @@ class RegressionNN:
 
         fig.suptitle(f'Epoch {epoch}', fontsize=16)
 
-        plt.savefig(self.data_dir + f'training_validation_{epoch}.png')
-        if self.plot_train:
-            plt.show()
-        else:
-            plt.close()
+        plt.savefig(self.plot_dir + '/training_validation/'+ f'training_validation_{epoch}.png')
+        plt.show(block=False)
 
 
     # def trainingOLD(self, x_train, y_train, epochs):
@@ -370,4 +367,5 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
             plt.ylabel('vel_' + str(i + 1))
             plt.grid()
             plt.title(f"Classifier section position {i + 1}, horizon {controller.N}")
-            plt.savefig(params.DATA_DIR + f'{i + 1}_pos_{controller.N}_BRS.png')
+            plt.savefig(params.PLOTS_DIR + '/brs/' + f'{i + 1}_pos_{controller.N}_BRS.png')
+            plt.show(block=False)

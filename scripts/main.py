@@ -22,6 +22,49 @@ install()
 
 progress_var = Value('i', 0)
 
+def plot_histogram(data, title="Histogram", xlabel="Value", ylabel="Frequency", bins=30, saving_dir="plots/histograms/"):
+    """
+    Plots a histogram of the given data as subplot.
+
+    Parameters:
+    - data: array-like, the data to plot
+    - title: str, title of the histogram
+    - xlabel: str, label for the x-axis
+    - ylabel: str, label for the y-axis
+    - bins: int, number of bins in the histogram
+    - saving_dir: str, directory to save the histogram image
+    """
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 9))
+    fig.suptitle(title)
+    axes = axes.flatten()
+    for i in range(len(axes)):
+        axes[i].set_visible(False) 
+
+    if len(data.shape) == 1:
+        data = data.reshape(-1, 1)
+
+    for i in range(data.shape[1]):
+        axes[i].set_visible(True)
+        axes[i].hist(data[:, i], bins=bins, edgecolor='black', alpha=0.7)
+        axes[i].set_title(f"Dimension {i+1}")
+        axes[i].set_xlabel(xlabel)
+        axes[i].set_ylabel(ylabel)
+        axes[i].grid(True, which='both', alpha=0.75)
+        
+    plt.savefig( os.path.join(saving_dir, title + ".png"))
+    plt.close(fig)
+
+def ensure_clean_dir(path: str):
+    """ Ensure that a directory exists and is empty, creating it if necessary."""
+    if os.path.exists(path):
+        for file in os.listdir(path):
+            file_path = os.path.join(path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    else:
+        os.makedirs(path)
+
 def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_values, box_max_values,randomSeed):
     global progress_var
     controller.resetHorizon(N_guess)
@@ -286,6 +329,7 @@ def main():
     N_increment = params.N_increment
     vboc_repeat = params.vboc_repeat
     horizon = args['horizon']
+    plots_dir = params.PLOTS_DIR
 
     if horizon is not None:
         try:
@@ -421,32 +465,16 @@ def main():
             y_lab_pose = ['Pos. [m]', 'Orient. [deg]', 'Incl. [deg]']
             y_lab_vel = ['v [m/s]', '$\omega$ [deg/s]']
 
-            plots_dir = params.PLOTS_DIR
-
-            # Clear the entire data directory
-            if os.path.exists(plots_dir):
-                for file in os.listdir(plots_dir):
-                    file_path = os.path.join(plots_dir, file)
-                    if os.path.isdir(file_path):
-                        shutil.rmtree(file_path)  # Remove directories
-                    else:
-                        os.remove(file_path)  # Remove files
-            else:
-                os.makedirs(plots_dir)
-
-            # Recreate the plots subdirectories
             traj_dir = os.path.join(plots_dir, 'trajectories')
             pose_dir = os.path.join(plots_dir, 'poses')
             velocity_dir = os.path.join(plots_dir, 'velocities')
             input_dir = os.path.join(plots_dir, 'inputs')
             threeD_dir = os.path.join(plots_dir, '3D')
 
-            os.makedirs(plots_dir, exist_ok=True)
-            os.makedirs(traj_dir, exist_ok=True)
-            os.makedirs(pose_dir, exist_ok=True)
-            os.makedirs(velocity_dir, exist_ok=True)
-            os.makedirs(input_dir, exist_ok=True)
-            os.makedirs(threeD_dir, exist_ok=True)
+            plots_subdirs = [traj_dir, pose_dir, velocity_dir, input_dir, threeD_dir]
+
+            for subdir in plots_subdirs:
+                ensure_clean_dir(subdir)
 
             # Start plotting 
             if params.check:
@@ -604,7 +632,26 @@ def main():
         # Load the data
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
+        b_all_data = np.load(params.DATA_DIR + 'sth_b_all_vboc.npy')
+        d_data = np.load(params.DATA_DIR + 'sth_d_vboc.npy')
+        status_data = np.load(params.DATA_DIR + 'sth_status_vboc.npy')
         
+        if params.plot:
+            hist_dir = os.path.join(plots_dir, 'histograms')
+            ensure_clean_dir(hist_dir)
+
+            b_all_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_all_vboc.npy')
+            d_data = np.load(f'{params.DATA_DIR}{robotic_system}_d_vboc.npy')
+            status_data = np.load(f'{params.DATA_DIR}{robotic_system}_status_vboc.npy')
+
+            plot_histogram(x_data[:,:6], title="x[0:6]", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
+            plot_histogram(x_data[:,6:], title="x[6:12]", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
+            plot_histogram(b_data, title="b", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
+            plot_histogram(b_all_data, title="b_all", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
+            plot_histogram(-d_data, title="d", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
+            plot_histogram(status_data, title="status", xlabel="Value", ylabel="Frequency", bins=10, saving_dir=hist_dir)
+
+
         # Remove positions and stack box dimensions in x_data
         x_data = np.hstack((b_data, x_data[:, 3:]))
         np.random.shuffle(x_data)
@@ -623,14 +670,6 @@ def main():
         
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
 
-        # if params.plot:
-        #     for j in range(x_data.shape[1]):
-        #         plt.figure()
-        #         plt.grid(True, which='both')
-        #         plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
-        #         plt.title(f'Histogram x[{j}]')
-        #         plt.show(block=False) 
-
         # Compute inputs (standardized box dimensions and initial orientation + normalized velocities) and outputs (normalized velocities)
         n = len(x_data)
         mean = np.mean(x_data[:, :nbori])
@@ -640,16 +679,6 @@ def main():
         for k in range(n):
             if y_data[k] != 0.: 
                 x_data[k, nbori:] /= y_data[k] 
-
-        if params.plot:
-            for j in range(x_data.shape[1]):
-                plt.figure()
-                plt.grid(True, which='both')
-                plt.hist(x_data[:,j], bins=30, alpha=0.7, color='blue', edgecolor='black')
-                plt.title(f'Histogram x[{j}] - standardized and normalized')
-                plt.show(block=False)
-
-        pause = input('Press Enter to continue with training...')
 
         train_size = int(params.train_ratio * n)
         val_size = int(params.val_ratio * n)
@@ -661,6 +690,10 @@ def main():
         x_test, y_test = x_data[-test_size:], y_data[-test_size:]
 
         print('Start training\n')
+
+        train_val_dir = os.path.join(plots_dir, 'training_validation')
+        ensure_clean_dir(train_val_dir)
+
         train_evol, val_evol = regressor.training(x_train_val, y_train_val, 
                                                   train_size, args['epochs'], refine=False)
         print('Training completed\n')
@@ -681,7 +714,10 @@ def main():
         torch.save({'mean': mean, 'std': std, 'model': nn_model.state_dict()}, nn_filename)
 
         # Plot the loss evolution
-        plt.figure()
+        loss_dir = os.path.join(plots_dir, 'loss_evolution')
+        ensure_clean_dir(loss_dir)
+
+        fig = plt.figure()
         plt.grid(True, which='both')
         plt.semilogy(train_evol, label='Training', c='b', lw=2)
         plt.semilogy(val_evol, label='Validation', c='g', lw=2)
@@ -689,10 +725,10 @@ def main():
         plt.xlabel('Epochs')
         plt.ylabel('MSE Loss (LP filtered)')
         plt.title(f'Training evolution, horizon {N}')
-        plt.savefig(params.DATA_DIR + f'evolution_{N}.png')
 
-        plt.show(block=False)
-    
+        plt.savefig(os.path.join(loss_dir, f'evolution_{N}.png'))
+        plt.close(fig)
+
     # PLOT THE VIABILITY KERNEL
     if params.plot: 
         # Load the data
@@ -717,13 +753,16 @@ def main():
             x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=200)
             
             np.save(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc', np.array(x_fixed, dtype=object), allow_pickle=True)
-            np.save(f'{params.DATA_DIR}{robotic_system}_x_status_vboc', np.array(x_status, dtype=object), allow_pickle=True)
+            np.save(f'{params.DATA_DIR}{robotic_system}_status_fixed_vboc', np.array(x_status, dtype=object), allow_pickle=True)
         else:
             x_fixed = np.load(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc.npy', allow_pickle=True)
-            x_status = np.load(f'{params.DATA_DIR}{robotic_system}_x_status_vboc.npy', allow_pickle=True)
-        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
-        plt.show(block=False)
+            x_status = np.load(f'{params.DATA_DIR}{robotic_system}_status_fixed_vboc.npy', allow_pickle=True)
 
+        brs_dir = os.path.join(plots_dir, 'brs')
+        ensure_clean_dir(brs_dir)
+
+        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
+ 
     elapsed_time = time.time() - start_time
     hours = int(elapsed_time // 3600)
     minutes = int((elapsed_time % 3600) // 60)
