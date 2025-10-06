@@ -311,6 +311,7 @@ def main():
     params.plot = args['plot']
     params.training = args['training']
     params.act = args['activation']
+    params.weight_decay = args['weightDecay']
 
     ### MODEL AND CONTROLLER DEFINITION
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -665,7 +666,7 @@ def main():
 
         optimizer = torch.optim.Adam(nn_model.parameters(), 
                                      lr=params.learning_rate,
-                                     weight_decay=2e-5,
+                                     weight_decay=params.weight_decay,
                                      amsgrad=True)
         
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)

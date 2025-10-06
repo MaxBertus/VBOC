@@ -18,6 +18,8 @@ def parse_args():
                         help='Plot the approximated viability kernel')
     parser.add_argument('-e', '--epochs', type=int, default=1000,
                         help='Number of epochs for training the neural network')
+    parser.add_argument('-w', '--weightDecay', type=float, default=2e-5,
+                        help='Weight decay for the neural network training')
     parser.add_argument('-a', '--activation', type=str, default='relu',
                         help='Activation function for the neural network')
     parser.add_argument('-c', '--check', action='store_true',
