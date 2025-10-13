@@ -158,9 +158,9 @@ class RegressionNN:
             loss_evol_train.append(loss_lp)
             # Validation
             loss_val = self.validation(x_val, y_val)
-            if ep % 100 == 0: 
-                print(f'Loss training: {loss_lp}')
-                print(f'Loss validation: {loss_val}')
+            # if ep % 100 == 0: 
+            #     print(f'Loss training: {loss_lp}')
+            #     print(f'Loss validation: {loss_val}')
             loss_evol_val.append(loss_val)
             progress_bar.update(1)
 

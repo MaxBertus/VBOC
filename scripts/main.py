@@ -690,14 +690,14 @@ def main():
         x_train_val, y_train_val = x_data[:-test_size], y_data[:-test_size]
         x_test, y_test = x_data[-test_size:], y_data[-test_size:]
 
-        print('Start training\n')
+        print('***START TRAINING***\n')
 
         train_val_dir = os.path.join(plots_dir, 'training_validation')
         ensure_clean_dir(train_val_dir)
 
         train_evol, val_evol = regressor.training(x_train_val, y_train_val, 
                                                   train_size, args['epochs'], refine=False)
-        print('Training completed\n')
+        print('***TRAINING COMPLETED***\n')
 
         print('***MODEL EVALUATION***')
         rmse_train, rel_err = regressor.testing(x_train_val, y_train_val)
@@ -749,7 +749,7 @@ def main():
         nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)        
         nn_model.load_state_dict(nn_data['model'])
 
-        print('Generate fixed velocity direction points on a grid')
+        print('***PLOTTING BRS***\n')
         if not os.path.exists(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc.npy'):
             x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=200)
             
@@ -764,6 +764,8 @@ def main():
 
         plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
  
+    print('***ALL DONE***')
+
     elapsed_time = time.time() - start_time
     hours = int(elapsed_time // 3600)
     minutes = int((elapsed_time % 3600) // 60)
