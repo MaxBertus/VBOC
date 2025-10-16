@@ -34,6 +34,7 @@ class Model:
         nu = 6 # dimension of input: 6 squared spinning rates
         npos = 3 # dimension of positon
         nori = 3 # dimension of orientation
+        nbox = 6 # dimension of box parameters
 
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
@@ -157,6 +158,7 @@ class Model:
         self.nv = nq
         self.npos = npos
         self.nori = nori
+        self.nbox = nbox
 
 class AbstractController:
     def __init__(self, model):

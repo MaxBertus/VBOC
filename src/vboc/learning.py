@@ -106,13 +106,10 @@ class RegressionNN:
         self.plot_train = params.plot
         self.plot_dir = params.PLOTS_DIR
 
-    def training(self, x_train_val, y_train_val, split, epochs, refine=False):
+    def training(self, x_train, y_train, x_val, y_val, epochs):
         """ Training of the neural network. """
 
         progress_bar = tqdm(total=epochs, desc='Training')
-        # Split the data into training and validation
-        x_train, x_val = x_train_val[:split], x_train_val[split:]
-        y_train, y_val = y_train_val[:split], y_train_val[split:]
 
         loss_evol_train = []
         loss_evol_val = []
@@ -198,7 +195,7 @@ class RegressionNN:
                 y_pred.append(self.model(x))
             y_pred = torch.cat(y_pred, dim=0)
             rmse = torch.sqrt(mse_loss(y_pred, y_test)).item()
-            rel_err = (y_pred - y_test) / y_test  # torch.maximum(y_test, torch.Tensor([1.]).to(self.device))
+            rel_err = torch.abs(y_pred - y_test) / (torch.abs(y_test)+1e-8)
         return rmse, rel_err  
 
     def plot_input_output(self, input_test, input_val, true_output_test, true_output_val,epoch):
@@ -286,7 +283,7 @@ class RegressionNN:
     #     return y_pred, np.sqrt(np.mean((y_pred - y_test)**2))
 
 
-def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts, grid=1e-2):
+def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, dataset, status_pts, grid=1e-2):
     """ Plot the Backward Reachable Set. """
     npos = model.npos
     color_map = ['green', 'red', 'orange', 'blue', 'purple']
@@ -318,13 +315,17 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
             x[:,model.npos + i] = box_max_grid
             x[:, nbori + i] = v_rav
 
+            # Transform z-velocity
+            # skew_col_idx = 8
+            # x[:, skew_col_idx] = power_transfomer.transform(x[:, skew_col_idx].reshape(-1, 1)).ravel()
+
             # Compute velocity norm
             y = np.linalg.norm(x[:, nbori:], axis=1)
 
             x_in = np.copy(x)
             # Normalize position
             x_in[:, :nbori] = (x[:, :nbori] - mean) / std
-            # Velocity direction
+            # Define velocity direction
             x_in[:, nbori:] /= y.reshape(len(y), 1)
 
             # Predict

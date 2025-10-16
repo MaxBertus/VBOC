@@ -25,7 +25,7 @@ batch_size: 1024          # batch size, 4096, 8192, 16384
 beta: 0.95                # low pass filter coefficient
 train_ratio: 0.7          # training dataset % size
 val_ratio: 0.1            # validation dataset % size
-hidden_size: 256          # number of hidden units in the neural network
+hidden_size: 512          # number of hidden units in the neural network
 hidden_layers: 2          # number of hidden layers in the neural network
 
 # Robot & Environment Parameters

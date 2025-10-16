@@ -5,5 +5,5 @@
 *.zip
 generated/*
 nn_models/*
-**/c_generated_code/
+c_generated_code/
 **/__pycache__/

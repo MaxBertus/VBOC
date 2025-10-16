@@ -18,6 +18,7 @@ import shutil
 from mpl_toolkits.mplot3d import Axes3D
 import warnings
 from rich.traceback import install
+from sklearn.preprocessing import PowerTransformer
 install()
 
 progress_var = Value('i', 0)
@@ -629,14 +630,21 @@ def main():
                     plt.savefig(os.path.join(threeD_dir, f'3D_traj_{k + 1}.png'))
                     plt.close(fig)
 
+    # *** TRAIN THE NEURAL NETWORK ***
     if params.training: 
-        # Load the data
+        # === Load the data ===
         x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
         b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
         b_all_data = np.load(params.DATA_DIR + 'sth_b_all_vboc.npy')
         d_data = np.load(params.DATA_DIR + 'sth_d_vboc.npy')
         status_data = np.load(params.DATA_DIR + 'sth_status_vboc.npy')
         
+        # === Correct skewed distribution of the 9th feature (z angular velocity) ===
+        skew_col_idx = 8 
+        pt = PowerTransformer(method='yeo-johnson')
+        # x_data[:, skew_col_idx] = pt.fit_transform(x_data[:, skew_col_idx].reshape(-1, 1)).ravel()
+        
+        # === Plot histograms of the data ===
         if params.plot:
             hist_dir = os.path.join(plots_dir, 'histograms')
             ensure_clean_dir(hist_dir)
@@ -652,13 +660,43 @@ def main():
             plot_histogram(-d_data, title="d", xlabel="Value", ylabel="Frequency", bins=50, saving_dir=hist_dir)
             plot_histogram(status_data, title="status", xlabel="Value", ylabel="Frequency", bins=10, saving_dir=hist_dir)
 
+        # === Remove positions and stack box dimensions in x_data ===
+        x_data = np.hstack((b_data, x_data[:, model.npos:]))
 
-        # Remove positions and stack box dimensions in x_data
-        x_data = np.hstack((b_data, x_data[:, 3:]))
+        # === Shuffle the data ===
         np.random.shuffle(x_data)
 
-        nb = b_data.shape[1]             
-        nbori = nb+model.nori            
+        # === Split the input data into training, validation, and test sets ===
+        n = len(x_data)        
+        nbori = model.nbox + model.nori
+        train_size = int(params.train_ratio * n)
+        val_size = int(params.val_ratio * n)
+        test_size = n - train_size - val_size
+        
+        x_train = x_data[:train_size]
+        x_val = x_data[train_size:train_size + val_size]
+        x_test = x_data[train_size + val_size:]
+
+        # === Compute mean/std on training set ===
+        mean = np.mean(x_train[:, :nbori])
+        std = np.std(x_train[:, :nbori])
+
+        # === Standardize box dimensions and initial orientation ===
+        for x_input in [x_train, x_val, x_test]:
+            x_input[:, :nbori] = (x_input[:, :nbori] - mean) / std
+
+        # === Normalize velocities ===
+        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1)
+        for k in range(n):
+            if y_data[k] != 0.: 
+                x_data[k, nbori:] /= y_data[k] 
+
+        # === Split output data into training, validation and test sets ===
+        y_train = y_data[:train_size]
+        y_val = y_data[train_size:train_size + val_size]
+        y_test = y_data[train_size + val_size:]
+
+        # === Setup neural network ===
         nx_train = nbori+model.nv
 
         nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)
@@ -671,50 +709,44 @@ def main():
         
         regressor = RegressionNN(params, nn_model, loss_fn, optimizer)
 
-        # Compute inputs (standardized box dimensions and initial orientation + normalized velocities) and outputs (normalized velocities)
-        n = len(x_data)
-        mean = np.mean(x_data[:, :nbori])
-        std = np.std(x_data[:, :nbori])
-        x_data[:, :nbori] = (x_data[:, :nbori] - mean) / std
-        y_data = np.linalg.norm(x_data[:, nbori:], axis=1).reshape(n, 1)
-        for k in range(n):
-            if y_data[k] != 0.: 
-                x_data[k, nbori:] /= y_data[k] 
+        # === Convert in torch.Tensor ===
+        x_train = torch.Tensor(x_train).to(device)
+        y_train = torch.Tensor(y_train).to(device)
+        x_val = torch.Tensor(x_val).to(device)
+        y_val = torch.Tensor(y_val).to(device)
+        x_test = torch.Tensor(x_test).to(device)
+        y_test = torch.Tensor(y_test).to(device)
 
-        train_size = int(params.train_ratio * n)
-        val_size = int(params.val_ratio * n)
-        test_size = n - train_size - val_size
-        
-        x_data = torch.Tensor(x_data).to(device)
-        y_data = torch.Tensor(y_data).to(device)
-        x_train_val, y_train_val = x_data[:-test_size], y_data[:-test_size]
-        x_test, y_test = x_data[-test_size:], y_data[-test_size:]
-
+        # === Train the neural network ===
         print('***START TRAINING***\n')
-
         train_val_dir = os.path.join(plots_dir, 'training_validation')
         ensure_clean_dir(train_val_dir)
 
-        train_evol, val_evol = regressor.training(x_train_val, y_train_val, 
-                                                  train_size, args['epochs'], refine=False)
+        train_evol, val_evol = regressor.training(x_train, y_train, x_val, y_val, args['epochs'])
         print('***TRAINING COMPLETED***\n')
 
+        # === Evaluate the model ===
         print('***MODEL EVALUATION***')
-        rmse_train, rel_err = regressor.testing(x_train_val, y_train_val)
+        rmse_train, rel_err = regressor.testing(torch.cat((x_train, x_val), dim=0), torch.cat((y_train, y_val), dim=0))
         print(f'RMSE on Training data: {rmse_train:.5f}')
-        print(f'Maximum error wrt training data: {torch.max(rel_err).item():.5f}')
+        print(f'Maximum error wrt training data: {torch.max(torch.abs(rel_err)).item():.5f}')
         
         rmse_test, rel_err = regressor.testing(x_test, y_test)
         print('---')
         print(f'RMSE on Test data: {rmse_test:.5f}')
         print(f'99 % of the data has a relative error lower than: {torch.quantile(rel_err, 0.99).item():.5f}%')
-        print(f'Maximum relative error wrt test data: {torch.max(rel_err).item():.5f}')
+        print(f'Maximum relative error wrt test data: {torch.max(torch.abs(rel_err)).item():.5f}')
         print('*---*---*---*\n')
 
-        # Save the model
-        torch.save({'mean': mean, 'std': std, 'model': nn_model.state_dict()}, nn_filename)
+        # === Save the model ===
+        torch.save({
+            'model': nn_model.state_dict(),
+            'mean': mean,
+            'std': std,
+            'power_transformer': pt,
+        }, nn_filename)
 
-        # Plot the loss evolution
+        # === Plot the loss evolution ===
         loss_dir = os.path.join(plots_dir, 'loss_evolution')
         ensure_clean_dir(loss_dir)
 
@@ -730,19 +762,10 @@ def main():
         plt.savefig(os.path.join(loss_dir, f'evolution_{N}.png'))
         plt.close(fig)
 
-    # PLOT THE VIABILITY KERNEL
+    # *** PLOT THE VIABILITY KERNEL ***
     if params.plot: 
-        # Load the data
-        x_data = np.load(f'{params.DATA_DIR}{robotic_system}_x_vboc.npy')
-        b_data = np.load(f'{params.DATA_DIR}{robotic_system}_b_vboc.npy')
-
-        # Remove positions and stack box dimensions in x_data
-        x_data = np.hstack((b_data, x_data[:, 3:]))
-        np.random.shuffle(x_data)
-
-        # Load the neural network model
-        nb = b_data.shape[1]             
-        nbori = nb+model.nori            
+        # === Load the neural network model ===
+        nbori = model.nbox+model.nori
         nx_train = nbori+model.nv
 
         nn_data = torch.load(nn_filename)
@@ -762,7 +785,7 @@ def main():
         brs_dir = os.path.join(plots_dir, 'brs')
         ensure_clean_dir(brs_dir)
 
-        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
+        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], nn_data['power_transformer'], x_fixed, x_status)
  
     print('***ALL DONE***')
 
