@@ -26,12 +26,15 @@ class Model:
         self.max_width = params.max_width
         self.max_length = params.max_length
         self.max_height = params.max_height
+        self.v_min = params.v_min
+        self.v_max = params.v_max
         self.eps = params.state_tol
 
         nq = 6 # dimension of pose: 3 for position, 3 for orientation (Euler Angles) 
         nu = 6 # dimension of input: 6 squared spinning rates
         npos = 3 # dimension of positon
         nori = 3 # dimension of orientation
+        nbox = 6 # dimension of box parameters
 
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
@@ -117,18 +120,6 @@ class Model:
         self.phi_hovering_max = np.arctan2(ro, self.mass * self.g) # max inclination allowed for hovering 
         self.phi_max = np.arccos((self.mass*self.g)/(self.cf * 6 * np.cos(self.alpha_tilt)*self.u_bar))
 
-        # print("phi_hovering: ", np.rad2deg(self.phi_hovering))
-        # print("phi_hovering_max: ", np.rad2deg(self.phi_hovering_max))
-        # print("phi_max: ", np.rad2deg(self.phi_max))
-
-        # Position
-        # Define symbolic parameters for the box bounds
-        # self.box_min = MX.sym("box_min", 3)  # [box_min_x, box_min_y, box_min_z]
-        # self.box_max = MX.sym("box_max", 3)  # [box_max_x, box_max_y, box_max_z]
-
-        # self.box_occupancy = np.array([-self.min_width, -self.min_length, -self.min_height,
-        #                                 self.min_width, self.min_length, self.min_height]) 
-
         D = diag(vertcat(self.min_width**2, self.min_length**2, self.min_height**2))
         self.Q = Function('Q', [self.x], [self.R(self.x) @ D @ self.R(self.x).T])
 
@@ -149,8 +140,11 @@ class Model:
 
         self.con_h_expr = vertcat(*self.con_h_expr_list)
 
-        # self.env_dimensions = np.array([-self.max_width, -self.max_length, -self.max_height,
-        #                                 self.max_width, self.max_length, self.max_height]) 
+        self.env_dimensions = np.array([-self.max_width, -self.max_length, -self.max_height,
+                                         self.max_width, self.max_length, self.max_height]) 
+        
+        self.drone_occupancy = np.array([-self.min_width, -self.min_length, -self.min_height,
+                                         self.min_width, self.min_length, self.min_height]) 
 
         # Acados model
         self.amodel = AcadosModel()

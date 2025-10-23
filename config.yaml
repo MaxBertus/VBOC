@@ -1,11 +1,11 @@
 # Solver Parameters
-prob_num: 50000          # number of OCP to create dataset
+prob_num: 50000           # number of OCP to create dataset
 cpu_num: 26
 
-N: 50                    # horizon in seconds
-N_increment: 0           # increment of the horizon
-dt: 10e-3                  # time step
-#alpha: 15                 # safety margin 
+N: 50                     # horizon in number of samples
+N_increment: 0            # increment of the horizon
+dt: 10e-3                 # time step
+#alpha: 15                # safety margin 
 
 solver_mode: 'BALANCE'    # HPIPM mode, can be --> 'BALANCE', 'ROBUST', 'SPEED', 'SPEED_ABS'
 nlp_max_iter: 1000
@@ -15,17 +15,17 @@ alpha_min: 1e-2
 levenberg_marquardt: 1e-9
 
 state_tol: 1e-6           # state tolerance
-# conv_tol: 1e-3            # convergence tolerance for the task
+# conv_tol: 1e-3          # convergence tolerance for the task
 cost_tol: 1e-6            # Tolerance for the cost
-vboc_repeat: 5         # VBOC repetition
+vboc_repeat: 5            # VBOC repetition
 
 # Training Parameters
-learning_rate: 1e-3       # learning rate
+learning_rate: 1e-4       # learning rate
 batch_size: 1024          # batch size, 4096, 8192, 16384
 beta: 0.95                # low pass filter coefficient
 train_ratio: 0.7          # training dataset % size
 val_ratio: 0.2            # validation dataset % size
-hidden_size: 256          # number of hidden units in the neural network
+hidden_size: 512          # number of hidden units in the neural network
 hidden_layers: 2          # number of hidden layers in the neural network
 
 # Robot & Environment Parameters
@@ -46,7 +46,10 @@ min_height: 0.2   # height/2 of the platform [m]
 
 max_width: 1 # max width/2 of the environment [m]
 max_length: 1 # max length/2 of the environment [m]
-max_height: 1 # min width/2 of the environment [m]
+max_height: 1 # max height/2 of the environment [m]
+
+v_min: [-5, -5, -6, -12.2, -12.2, -12.2]  # min initial velocity [m/s, rad/s]  for box dimensions 1x1x1
+v_max: [5, 5, 6, 12.2, 12.2, 12.2]       # max initial velocity [m/s, rad/s] for box dimensions 1x1x1
 
 # Data generation
 orient_g_rej: true # select orientation with gravity rejection

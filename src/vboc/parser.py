@@ -18,7 +18,9 @@ def parse_args():
                         help='Plot the approximated viability kernel')
     parser.add_argument('-e', '--epochs', type=int, default=1000,
                         help='Number of epochs for training the neural network')
-    parser.add_argument('-a', '--activation', type=str, default='relu',
+    parser.add_argument('-w', '--weightDecay', type=float, default=2e-5,
+                        help='Weight decay for the neural network training')
+    parser.add_argument('-a', '--activation', type=str, default='gelu',
                         help='Activation function for the neural network')
     parser.add_argument('-c', '--check', action='store_true',
                         help='Sanity check: fixed d and box, and null orientation')
@@ -33,6 +35,7 @@ class Parameters:
         self.ROOT_DIR = os.path.join(self.PKG_DIR, '../..')
         self.CONF_DIR = os.path.join(self.ROOT_DIR, 'config/')
         self.DATA_DIR = os.path.join(self.ROOT_DIR, 'data/')
+        self.PLOTS_DIR = os.path.join(self.ROOT_DIR, 'plots/')        
         self.GEN_DIR = os.path.join(self.ROOT_DIR, 'generated/')
         self.NN_DIR = os.path.join(self.ROOT_DIR, 'nn_models/' + robot_name + '/')
 
@@ -83,5 +86,8 @@ class Parameters:
         self.max_width = float(parameters['max_width'])
         self.max_length = float(parameters['max_length'])
         self.max_height = float(parameters['max_height'])
+
+        self.v_min = np.array(parameters['v_min'])
+        self.v_max = np.array(parameters['v_max'])
 
         self.orient_g_rej = bool(parameters['orient_g_rej'])

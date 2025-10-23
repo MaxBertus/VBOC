@@ -1,4 +1,5 @@
 import random
+from xml.parsers.expat import model
 import numpy as np
 import torch
 import torch.nn as nn
@@ -104,15 +105,12 @@ class RegressionNN:
         self.beta = params.beta
         self.batch_size = params.batch_size
         self.plot_train = params.plot
-        self.data_dir = params.DATA_DIR
+        self.plot_dir = params.PLOTS_DIR
 
-    def training(self, x_train_val, y_train_val, split, epochs, refine=False):
+    def training(self, x_train, y_train, x_val, y_val, epochs):
         """ Training of the neural network. """
 
         progress_bar = tqdm(total=epochs, desc='Training')
-        # Split the data into training and validation
-        x_train, x_val = x_train_val[:split], x_train_val[split:]
-        y_train, y_val = y_train_val[:split], y_train_val[split:]
 
         loss_evol_train = []
         loss_evol_val = []
@@ -158,9 +156,9 @@ class RegressionNN:
             loss_evol_train.append(loss_lp)
             # Validation
             loss_val = self.validation(x_val, y_val)
-            if ep % 100 == 0: 
-                print(f'Loss training: {loss_lp}')
-                print(f'Loss validation: {loss_val}')
+            # if ep % 100 == 0: 
+            #     print(f'Loss training: {loss_lp}')
+            #     print(f'Loss validation: {loss_val}')
             loss_evol_val.append(loss_val)
             progress_bar.update(1)
 
@@ -170,7 +168,6 @@ class RegressionNN:
 
         progress_bar.close()
         return loss_evol_train, loss_evol_val
-
 
     def validation(self, x_val, y_val):
         """ Compute the loss wrt to validation data. """
@@ -199,7 +196,7 @@ class RegressionNN:
                 y_pred.append(self.model(x))
             y_pred = torch.cat(y_pred, dim=0)
             rmse = torch.sqrt(mse_loss(y_pred, y_test)).item()
-            rel_err = (y_pred - y_test) / y_test  # torch.maximum(y_test, torch.Tensor([1.]).to(self.device))
+            rel_err = torch.abs(y_pred - y_test) / (torch.abs(y_test)+1e-8)
         return rmse, rel_err  
 
     def plot_input_output(self, input_test, input_val, true_output_test, true_output_val,epoch):
@@ -233,128 +230,69 @@ class RegressionNN:
 
         fig.suptitle(f'Epoch {epoch}', fontsize=16)
 
-        plt.savefig(self.data_dir + f'training_validation_{epoch}.png')
-        if self.plot_train:
-            plt.show()
-        else:
-            plt.close()
+        plt.savefig(self.plot_dir + '/training_validation/'+ f'training_validation_{epoch}.png')
+        plt.show(block=False)
 
-
-    # def trainingOLD(self, x_train, y_train, epochs):
-    #     """ Training of the neural network. """
-    #     t = 1
-    #     progress_bar = tqdm(total=epochs, desc='Training')
-    #     n = len(x_train)
-    #     val = np.amax(y_train)
-    #     b = n // self.batch_size          # number of iterations for 1 epoch
-    #     max_iter = b * epochs
-    #     evolution = []
-    #     self.model.train()
-    #     while t < max_iter: #val > 1e-3 and
-    #         indexes = random.sample(range(n), self.batch_size)
-
-    #         x_tensor = torch.Tensor(x_train[indexes]).to(self.device)
-    #         y_tensor = torch.Tensor(y_train[indexes]).to(self.device)
-
-    #         # Forward pass: compute predicted y by passing x to the model
-    #         y_pred = self.model(x_tensor)
-
-    #         # Compute the loss
-    #         loss = self.loss_fn(y_pred, y_tensor)
-
-    #         # Backward and optimize
-    #         loss.backward()
-    #         self.optimizer.step()
-    #         self.optimizer.zero_grad()
-
-    #         val = self.beta * val + (1 - self.beta) * loss.item()
-    #         t += 1
-    #         if t % b == 0:
-    #             evolution.append(val)
-    #             progress_bar.update(1)
-
-    #     progress_bar.close()
-    #     return evolution
-    
-    # def testingOLD(self, x_test, y_test):
-    #     """ Compute the RMSE wrt to training or test data. """
-    #     loader = DataLoader(torch.Tensor(x_test).to(self.device), batch_size=self.batch_size, shuffle=False)
-    #     self.model.eval()
-    #     y_pred = np.empty((len(x_test), 1))
-    #     with torch.no_grad():
-    #         for i, x in enumerate(loader):
-    #             if (i + 1) * self.batch_size > len(x_test):
-    #                 y_pred[i * self.batch_size:] = self.model(x).cpu().numpy()
-    #             else:
-    #                 y_pred[i * self.batch_size:(i+1) * self.batch_size] = self.model(x).cpu().numpy()
-    #     return y_pred, np.sqrt(np.mean((y_pred - y_test)**2))
-
-
-def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts, grid=1e-2):
+def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, dataset, status_pts, grid=1e-2):
     """ Plot the Backward Reachable Set. """
-
-    nq = model.nq
+    npos = model.npos
     color_map = ['green', 'red', 'orange', 'blue', 'purple']
+
     with torch.no_grad():
-        for i in range(nq):
+        for i in range(npos):
             plt.figure()
 
-            q, v = np.meshgrid(np.arange(model.x_min[i], model.x_max[i] + grid, grid),
-                               np.arange(model.x_min[i + nq], model.x_max[i + nq] + grid, grid))
+            q_grid = np.arange(model.env_dimensions[i]- model.drone_occupancy[i], model.env_dimensions[i+model.npos] - model.drone_occupancy[i+model.npos] +  grid, grid)
+            v_grid = np.arange(model.v_min[i], model.v_max[i] + grid, grid)
+            box_max_grid = np.empty(len(q_grid)) * np.nan
+            box_min_grid = np.empty(len(q_grid)) * np.nan
+
+            for j in range(len(q_grid)):
+                box_max_grid[j] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[j])
+                box_min_grid[j] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
+
+            box_max_grid = np.tile(box_max_grid, len(v_grid))
+            box_min_grid = np.tile(box_min_grid, len(v_grid))
+
+            q, v = np.meshgrid(q_grid, v_grid)
             q_rav, v_rav = q.ravel(), v.ravel()
             n = len(q_rav)
 
-            x_static = (model.x_max + model.x_min) / 2
+            nbori = 2*model.npos + model.nori
+            x_static = np.zeros(nbori + model.nv)
             x = np.repeat(x_static.reshape(1, len(x_static)), n, axis=0)
-            x[:, i] = q_rav
-            x[:, nq + i] = v_rav
+            x[:, i] = box_min_grid
+            x[:,model.npos + i] = box_max_grid
+            x[:, nbori + i] = v_rav
+
+            # Transform z-velocity
+            # skew_col_idx = 8
+            # x[:, skew_col_idx] = power_transfomer.transform(x[:, skew_col_idx].reshape(-1, 1)).ravel()
 
             # Compute velocity norm
-            y = np.linalg.norm(x[:, nq:], axis=1)
+            y = np.linalg.norm(x[:, nbori:], axis=1)
 
             x_in = np.copy(x)
             # Normalize position
-            x_in[:, :nq] = (x[:, :nq] - mean) / std
-            # Velocity direction
-            x_in[:, nq:] /= y.reshape(len(y), 1)
+            x_in[:, :nbori] = (x[:, :nbori] - mean) / std
+            # Define velocity direction
+            x_in[:, nbori:] /= y.reshape(len(y), 1)
 
             # Predict
-            y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32))).cpu().numpy()
+            device = next(nn_model.parameters()).device  # get model device
+            y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32)).to(device)).cpu().numpy()
             out = np.array([0 if y[j] > y_pred[j] else 1 for j in range(n)])
             z = out.reshape(q.shape)
             plt.contourf(q, v, z, cmap='coolwarm', alpha=0.8)
 
             # Plot of the viable samples
-            plt.scatter(dataset[i][:, i], dataset[i][:, nq + i], color='darkgreen', s=12)
+            plt.scatter(dataset[i][:, i], dataset[i][:, model.nq + i], color='darkgreen', s=12)
 
-            # # Plot of the viable samples
-            # status = status_pts[i]
-            # q1 = np.linspace(model.x_min[i], model.x_max[i], 100)
-            # q2 = np.tile(q1, 2)
-            # for k, color_name in enumerate(color_map):
-            #     plt.scatter(q2[status == k], np.zeros_like(q2[status == k]), color=color_name, label=f'Status {k}', s=12)
-            # plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-
-            # Remove the joint positions s.t. robot collides with obstacles 
-            if params.obs_flag:
-                pts = np.empty(0)
-                for j in range(len(x)):
-                    if not controller.checkCollision(x[j]):
-                        pts = np.append(pts, x[j, i])
-                if len(pts) > 0:
-                    # plt.axvline(np.min(pts), color='blueviolet', linewidth=1.5)
-                    # plt.axvline(np.max(pts), color='black', linewidth=1.5)
-
-                    origin = (np.min(pts), model.x_min[i + nq])
-                    width = np.max(pts) - np.min(pts)
-                    height = model.x_max[i + nq] - model.x_min[i + nq]
-                    rect = patches.Rectangle(origin, width, height, linewidth=1, edgecolor='black', facecolor='black')
-                    plt.gca().add_patch(rect)
-
-            plt.xlim([model.x_min[i], model.x_max[i]])
-            plt.ylim([model.x_min[i + nq], model.x_max[i + nq]])
-            plt.xlabel('q_' + str(i + 1))
-            plt.ylabel('dq_' + str(i + 1))
+            plt.xlim([model.env_dimensions[i], model.env_dimensions[i+3]])
+            plt.ylim([model.v_min[i], model.v_max[i]])
+            plt.xlabel('pos_' + str(i + 1))
+            plt.ylabel('vel_' + str(i + 1))
             plt.grid()
-            plt.title(f"Classifier section joint {i + 1}, horizon {controller.N}")
-            plt.savefig(params.DATA_DIR + f'{i + 1}dof_{controller.N}_BRS.png')
+            plt.title(f"Classifier section position {i + 1}, horizon {controller.N}")
+            plt.savefig(params.PLOTS_DIR + '/brs/' + f'{i + 1}_pos_{controller.N}_BRS.png')
+            plt.show(block=False)
