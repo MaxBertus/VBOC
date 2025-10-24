@@ -1,5 +1,5 @@
 # Solver Parameters
-prob_num: 1           # number of OCP to create dataset
+prob_num: 200000           # number of OCP to create dataset
 cpu_num: 26
 
 N: 50                     # horizon in number of samples
