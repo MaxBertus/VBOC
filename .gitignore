@@ -3,7 +3,9 @@
 *.json
 *.png
 *.zip
-generated/*
-nn_models/*
+data/
+generated/
+nn_models/
+vboc_venv/
 c_generated_code/
 **/__pycache__/

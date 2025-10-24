@@ -423,6 +423,10 @@ def main():
     # *** GENERATE DATA ***
     if params.generation:
 
+        # === Adjust number of problems for checking mode ===
+        if params.check:
+            params.prob_num = 1
+        
         # === Define initial position ===
         pos_init = np.zeros((params.prob_num, model.npos))
 
@@ -856,7 +860,7 @@ def main():
         plt.close(fig)
 
     # *** PLOT THE VIABILITY KERNEL ***
-    if params.plot: 
+    if params.plot and not params.generation: 
         # === Load the neural network model ===
         nbori = model.nbox+model.nori
         nx_train = nbori+model.nv
