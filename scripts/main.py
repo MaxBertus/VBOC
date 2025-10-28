@@ -128,12 +128,13 @@ def computeDataOnBorder(q_init, N_guess, N_increment, vboc_repeat, box_min_value
     else:
         return x_star[0], x_star, u_star, box_min_values, box_max_values, status, d
     
-def fixedVelocityDir(N_guess, N_increment, n_pts=100 ):  
+def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100 ):  
     """ Compute data on section of the viability kernel
     
     Args:
     - N_guess (int): initial horizon guess
     - N_increment (int): horizon increment for VBOC
+    - vboc_repeat (int): number of repetitions for VBOC
     - n_pts (int): number of points per DOF
 
     Returns:
