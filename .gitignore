@@ -3,7 +3,5 @@
 *.json
 *.png
 *.zip
-generated/
 vboc_venv/
-c_generated_code/
 **/__pycache__/

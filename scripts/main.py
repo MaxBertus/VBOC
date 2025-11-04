@@ -155,7 +155,7 @@ def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100 ):
 
         for k in range(n_pts):
             box_max_grid[k] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[k])
-            box_min_grid[k] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[k])
+            box_min_grid[k] = -max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[k])
 
         # === Duplicate for positive and negative direction ===
         q_grid = np.tile(q_grid, 2)
@@ -172,7 +172,7 @@ def fixedVelocityDir(N_guess, N_increment, vboc_repeat, n_pts=100 ):
             
             # === Update box dimensions ===
             box_max_values = model.env_dimensions[3:].copy()
-            box_min_values = model.env_dimensions[:3].copy()
+            box_min_values = -model.env_dimensions[:3].copy()
 
             box_max_values[i] = box_max_grid[j]
             box_min_values[i] = box_min_grid[j]
@@ -882,6 +882,20 @@ def main():
 
         brs_dir = os.path.join(plots_dir, 'brs')
         ensure_clean_dir(brs_dir)
+
+        # for i in range(model.npos):
+        #     plt.figure()
+        #     # Plot of the viable samples
+        #     plt.scatter(x_fixed[i][:, i], x_fixed[i][:, model.nq + i], color='darkgreen', s=12)
+
+        #     plt.xlim([model.env_dimensions[i], model.env_dimensions[i+3]])
+        #     plt.ylim([model.v_min[i], model.v_max[i]])
+        #     plt.xlabel('pos_' + str(i + 1))
+        #     plt.ylabel('vel_' + str(i + 1))
+        #     plt.grid()
+        #     plt.title(f"Classifier section position {i + 1}, horizon {controller.N}")
+        #     plt.savefig(params.PLOTS_DIR + '/brs/' + f'{i + 1}_pos_{controller.N}_BRS.png')
+        #     plt.show(block=False)
 
         plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], nn_data['power_transformer'], x_fixed, x_status)
  

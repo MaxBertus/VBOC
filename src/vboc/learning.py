@@ -249,7 +249,7 @@ def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, d
 
             for j in range(len(q_grid)):
                 box_max_grid[j] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[j])
-                box_min_grid[j] = max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
+                box_min_grid[j] = -max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
 
             box_max_grid = np.tile(box_max_grid, len(v_grid))
             box_min_grid = np.tile(box_min_grid, len(v_grid))
