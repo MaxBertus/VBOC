@@ -233,7 +233,7 @@ class RegressionNN:
         plt.savefig(self.plot_dir + '/training_validation/'+ f'training_validation_{epoch}.png')
         plt.show(block=False)
 
-def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, dataset, status_pts, grid=1e-2):
+def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, dataset, status_pts, grid=1.2e-2):
     """ Plot the Backward Reachable Set. """
     npos = model.npos
     color_map = ['green', 'red', 'orange', 'blue', 'purple']
@@ -241,18 +241,20 @@ def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, d
     with torch.no_grad():
         for i in range(npos):
             plt.figure()
+            print (f'Plotting BRS for position {i + 1}...')
 
             q_grid = np.arange(model.env_dimensions[i]- model.drone_occupancy[i], model.env_dimensions[i+model.npos] - model.drone_occupancy[i+model.npos] +  grid, grid)
             v_grid = np.arange(model.v_min[i], model.v_max[i] + grid, grid)
-            box_max_grid = np.empty(len(q_grid)) * np.nan
-            box_min_grid = np.empty(len(q_grid)) * np.nan
+            box_max = np.array([model.drone_occupancy[3], model.drone_occupancy[4], model.drone_occupancy[5]])
+            box_max_grid = np.tile(box_max, (len(q_grid),1))
+            box_min_grid = box_max_grid.copy()
 
             for j in range(len(q_grid)):
-                box_max_grid[j] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[j])
-                box_min_grid[j] = -max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
+                box_max_grid[j,i] = min(model.env_dimensions[i+3], model.env_dimensions[i+3] - q_grid[j])
+                box_min_grid[j,i] = -max(model.env_dimensions[i], model.env_dimensions[i] - q_grid[j])
 
-            box_max_grid = np.tile(box_max_grid, len(v_grid))
-            box_min_grid = np.tile(box_min_grid, len(v_grid))
+            box_max_grid = np.tile(box_max_grid, (len(v_grid), 1))
+            box_min_grid = np.tile(box_min_grid, (len(v_grid), 1))
 
             q, v = np.meshgrid(q_grid, v_grid)
             q_rav, v_rav = q.ravel(), v.ravel()
@@ -261,23 +263,29 @@ def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, d
             nbori = 2*model.npos + model.nori
             x_static = np.zeros(nbori + model.nv)
             x = np.repeat(x_static.reshape(1, len(x_static)), n, axis=0)
-            x[:, i] = box_min_grid
-            x[:,model.npos + i] = box_max_grid
+            x[:, :model.npos] = box_min_grid
+            x[:, model.npos:model.npos+3] = box_max_grid
             x[:, nbori + i] = v_rav
+
+            # for k in range(len(x)):
+            #     if k % 100 == 0:
+            #         print(f'x[{k}]: {x[k]}')
 
             # Transform z-velocity
             # skew_col_idx = 8
             # x[:, skew_col_idx] = power_transfomer.transform(x[:, skew_col_idx].reshape(-1, 1)).ravel()
-
-            # Compute velocity norm
-            y = np.linalg.norm(x[:, nbori:], axis=1)
-
+            
             x_in = np.copy(x)
-            # Normalize position
+            # Standardize box dimensions and initial orientation
             x_in[:, :nbori] = (x[:, :nbori] - mean) / std
-            # Define velocity direction
-            x_in[:, nbori:] /= y.reshape(len(y), 1)
+            # Normalize velocities            
+            y = np.linalg.norm(x[:, nbori:], axis=1)
+            y = y.reshape(len(y),1)
 
+            for k in range(len(y)):
+                if y[k] != 0.: 
+                    x_in[k, nbori:] /= y[k] 
+            
             # Predict
             device = next(nn_model.parameters()).device  # get model device
             y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32)).to(device)).cpu().numpy()
@@ -288,7 +296,7 @@ def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, d
             # Plot of the viable samples
             plt.scatter(dataset[i][:, i], dataset[i][:, model.nq + i], color='darkgreen', s=12)
 
-            plt.xlim([model.env_dimensions[i], model.env_dimensions[i+3]])
+            plt.xlim([model.env_dimensions[i]- model.drone_occupancy[i], model.env_dimensions[i+3]- model.drone_occupancy[i+model.npos]])
             plt.ylim([model.v_min[i], model.v_max[i]])
             plt.xlabel('pos_' + str(i + 1))
             plt.ylabel('vel_' + str(i + 1))
