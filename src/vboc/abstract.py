@@ -97,7 +97,7 @@ class Model:
             self.x[nq:nq+npos],
             self.Tinv(self.x)@self.x[nq+npos:],
             -self.g*np.array([[0], [0], [1]]) + self.fc(self.x, self.u)/self.mass, 
-            np.linalg.inv(self.J) @ (cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
+            np.linalg.inv(self.J) @ (-cross(self.x[nq+npos:], self.J @ self.x[nq+npos:])) + np.linalg.inv(self.J) @ self.tc(self.u)
         )
 
         # BOUNDS

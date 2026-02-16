@@ -864,6 +864,7 @@ def main():
     # *** PLOT THE VIABILITY KERNEL ***
     if params.plot and not params.generation: 
         # === Load the neural network model ===
+        device = torch.device("cpu")
         nbori = model.nbox+model.nori
         nx_train = nbori+model.nv
 
