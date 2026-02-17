@@ -182,7 +182,7 @@ class AbstractController:
         # COST
         # Maximize initial velocity
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
-        self.ocp.model.cost_expr_ext_cost_0 = dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
+        self.ocp.model.cost_expr_ext_cost_0 = -dot(self.model.p[:self.model.nq], self.model.x[self.model.nq:])
         self.ocp.parameter_values = np.zeros(self.model.nv)
 
         # CONSTRAINTS

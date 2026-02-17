@@ -16,7 +16,7 @@ levenberg_marquardt: 1e-9
 
 state_tol: 1e-6           # state tolerance
 # conv_tol: 1e-3          # convergence tolerance for the task
-cost_tol: 1e-6            # Tolerance for the cost
+cost_tol: 1e-3           # Tolerance for the cost
 vboc_repeat: 5            # VBOC repetition
 
 # Training Parameters

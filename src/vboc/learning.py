@@ -233,7 +233,7 @@ class RegressionNN:
         plt.savefig(self.plot_dir + '/training_validation/'+ f'training_validation_{epoch}.png')
         plt.show(block=False)
 
-def plot_brs(params, model, controller, nn_model, mean, std, power_transfomer, dataset, status_pts, grid=1.2e-2):
+def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts, grid=1.2e-2):
     """ Plot the Backward Reachable Set. """
     npos = model.npos
     color_map = ['green', 'red', 'orange', 'blue', 'purple']

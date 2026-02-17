@@ -82,11 +82,11 @@ class ViabilityController(AbstractController):
                 # Compare the current cost with the previous one:
                 x0 = self.ocp_solver.get(0, "x")
                 gamma_new = np.linalg.norm(x0[self.model.nq:])
-                gamma_new = -d @ x0[self.model.nq:]
+                gamma_new = d @ x0[self.model.nq:]
 
-                # print(f"Iteration {r}: gamma = {gamma_new:.4f}, diff = {gamma_new - gamma:.4f}, status = {status}")
+                print(f"Iteration {r}: gamma_new = {gamma_new:.4f}, gamma = {gamma:.4f}, diff = {gamma_new - gamma:.4f}, status = {status}")
 
-                if gamma_new < gamma + self.tol and status == 0:
+                if gamma_new < gamma - self.tol and status == 0:
                     break
                 
                 gamma = gamma_new

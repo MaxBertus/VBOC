@@ -488,6 +488,7 @@ def main():
 
         # === Initialize storage variables ===
         x_data, x_traj, u_traj, b_min, b_max = [], [], [], [], []
+        solved = 0
 
         print('Start data generation')
         for nb in range(n_batch):  
@@ -872,6 +873,44 @@ def main():
         nn_model = NeuralNetwork(nx_train, params.hidden_size, 1, params.hidden_layers, act_fun, ub).to(device)        
         nn_model.load_state_dict(nn_data['model'])
 
+        ################# DEBUG
+        print('***DEBUG***\n')
+
+        x_cp = np.array([0.0, 0, 0,  0, 0, 0,  1, 0, 0,  0, 0, 0])
+        box_cp = np.array([-1, 2, -2, 2, -2, 2])
+
+        box_in_robot_frame = box_cp[[0, 2, 4, 1, 3, 5]] - (x_cp[0], x_cp[1], x_cp[2], x_cp[0], x_cp[1], x_cp[2])
+        room_lower = np.array([-2.0, -2.0, -2.0])
+        room_upper = np.array([2.0, 2.0, 2.0])
+
+        box_lower = box_in_robot_frame[:3]
+        box_upper = box_in_robot_frame[3:]
+
+        # Apply element-wise clipping using CasADi symbolic ops
+        box_in_robot_frame[:3] = -np.maximum(box_lower, room_lower)  
+        box_in_robot_frame[3:] =  np.minimum( box_upper,  room_upper)  
+        box = (box_in_robot_frame - nn_data['mean']) / nn_data['std']
+
+        orient = (x_cp[3:6] - nn_data['mean']) / nn_data['std']
+
+        # Normalize velocities            
+        vel_norm = np.linalg.norm(x_cp[6:])
+        vel_dir = x_cp[6:] / (vel_norm + 1e-6) 
+
+        input = np.concatenate([box, orient, vel_dir])
+
+
+        device = next(nn_model.parameters()).device  # get model device
+        with torch.no_grad():
+            y_pred = (nn_model(torch.from_numpy(input.astype(np.float32)).to(device)).cpu().numpy())*0.95
+
+        print(f'Predicted viability margin: {y_pred[0]:.5f}')
+
+        exit()
+
+        ##################################################
+
+
         print('***PLOTTING BRS***\n')
         if not os.path.exists(f'{params.DATA_DIR}{robotic_system}_x_fixed_vboc.npy'):
             x_fixed, x_status = fixedVelocityDir(N, N_increment, vboc_repeat, n_pts=200)
@@ -885,7 +924,7 @@ def main():
         brs_dir = os.path.join(plots_dir, 'brs')
         ensure_clean_dir(brs_dir)
 
-        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], nn_data['power_transformer'], x_fixed, x_status)
+        plot_brs(params, model, controller, nn_model, nn_data['mean'], nn_data['std'], x_fixed, x_status)
  
     print('***ALL DONE***')
     elapsed_time = time.time() - start_time
