@@ -48,8 +48,8 @@ max_width: 2 # max width/2 of the environment [m]
 max_length: 2 # max length/2 of the environment [m]
 max_height: 2 # max height/2 of the environment [m]
 
-v_min: [-5, -5, -6, -12.2, -12.2, -12.2]  # min initial velocity [m/s, rad/s]  for box dimensions 1x1x1
-v_max: [5, 5, 6, 12.2, 12.2, 12.2]        # max initial velocity [m/s, rad/s] for box dimensions 1x1x1
+v_min: [-8, -8, -8, -12.2, -12.2, -12.2]  # min initial velocity [m/s, rad/s]  for box dimensions 1x1x1
+v_max: [8, 8, 8, 12.2, 12.2, 12.2]        # max initial velocity [m/s, rad/s] for box dimensions 1x1x1
 
 # Data generation
 orient_g_rej: true # select orientation with gravity rejection

@@ -12,6 +12,7 @@ from tqdm import tqdm
 from urdf_parser_py.urdf import URDF
 import adam
 from adam.pytorch import KinDynComputations
+from matplotlib.ticker import AutoMinorLocator
 
 class NeuralNetwork(nn.Module):
     """ A simple feedforward neural network. """
@@ -284,23 +285,52 @@ def plot_brs(params, model, controller, nn_model, mean, std, dataset, status_pts
 
             for k in range(len(y)):
                 if y[k] != 0.: 
-                    x_in[k, nbori:] /= y[k] 
+                    x_in[k, nbori:] = -x_in[k, nbori:] / y[k] 
             
             # Predict
             device = next(nn_model.parameters()).device  # get model device
             y_pred = nn_model(torch.from_numpy(x_in.astype(np.float32)).to(device)).cpu().numpy()
             out = np.array([0 if y[j] > y_pred[j] else 1 for j in range(n)])
             z = out.reshape(q.shape)
+
+
+            plt.rcParams.update({
+                "text.usetex": True,
+                "font.family": "serif",
+            })
+
+            axis_labels = ['x', 'y', 'z']
+
             plt.contourf(q, v, z, cmap='coolwarm', alpha=0.8)
 
             # Plot of the viable samples
-            plt.scatter(dataset[i][:, i], dataset[i][:, model.nq + i], color='darkgreen', s=12)
+            plt.scatter(dataset[i][:, i], -dataset[i][:, model.nq + i], color='darkblue', s=2)
 
             plt.xlim([model.env_dimensions[i]- model.drone_occupancy[i], model.env_dimensions[i+3]- model.drone_occupancy[i+model.npos]])
             plt.ylim([model.v_min[i], model.v_max[i]])
-            plt.xlabel('pos_' + str(i + 1))
-            plt.ylabel('vel_' + str(i + 1))
-            plt.grid()
-            plt.title(f"Classifier section position {i + 1}, horizon {controller.N}")
-            plt.savefig(params.PLOTS_DIR + '/brs/' + f'{i + 1}_pos_{controller.N}_BRS.png')
+
+            plt.xlabel(rf"$p_{{{axis_labels[i]}}} [m]$", fontsize=14)
+            plt.ylabel(rf"$v_{{{axis_labels[i]}}} [m/s]$", fontsize=14)
+
+            # Get current axis
+            ax = plt.gca()
+
+            # More resolved ticks
+            ax.xaxis.set_minor_locator(AutoMinorLocator(6))
+            ax.yaxis.set_minor_locator(AutoMinorLocator(6))
+
+            ax.tick_params(axis='both', which='major', length=6, width=1, labelsize=14)
+            ax.tick_params(axis='both', which='minor', length=3, width=0.8, labelsize=14)
+
+            # Grid (major + minor)
+            ax.grid(which='major', linestyle='-', linewidth=0.8, alpha=0.7)
+            ax.grid(which='minor', linestyle='--', linewidth=0.5, alpha=0.5)
+
+            # Save as vector PDF
+            plt.savefig(
+                params.PLOTS_DIR + '/brs/' + f'{i + 1}_pos_{controller.N}_BRS.pdf',
+                format='pdf',
+                bbox_inches='tight'
+            )
+
             plt.show(block=False)
