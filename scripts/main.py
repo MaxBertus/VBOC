@@ -18,7 +18,6 @@ import shutil
 from mpl_toolkits.mplot3d import Axes3D
 import warnings
 from rich.traceback import install
-from sklearn.preprocessing import PowerTransformer
 install()
 
 progress_var = Value('i', 0)
@@ -739,11 +738,6 @@ def main():
         b_all_data = np.load(params.DATA_DIR + 'sth_b_all_vboc.npy')
         d_data = np.load(params.DATA_DIR + 'sth_d_vboc.npy')
         status_data = np.load(params.DATA_DIR + 'sth_status_vboc.npy')
-
-        # === Correct skewed distribution of the 9th feature (z angular velocity) ===
-        skew_col_idx = 8 
-        pt = PowerTransformer(method='yeo-johnson')
-        # x_data[:, skew_col_idx] = pt.fit_transform(x_data[:, skew_col_idx].reshape(-1, 1)).ravel()
         
         # === Plot histograms of the data ===
         if params.plot:
@@ -843,7 +837,6 @@ def main():
             'model': nn_model.state_dict(),
             'mean': mean,
             'std': std,
-            'power_transformer': pt,
         }, nn_filename)
 
         # === Plot the loss evolution ===
