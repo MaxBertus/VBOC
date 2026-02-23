@@ -2,7 +2,7 @@
 prob_num: 200000           # number of OCP to create dataset
 cpu_num: 26
 
-N: 50                     # horizon in number of samples
+N: 20                     # horizon in number of samples
 N_increment: 0            # increment of the horizon
 dt: 20e-3                 # time step
 #alpha: 15                # safety margin 
