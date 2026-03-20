@@ -65,7 +65,7 @@ class ViabilityController(AbstractController):
 
     #     return x_sol, u_sol, N, status
         
-    def solveVBOC(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
+    def solve_vboc(self, q_init, d, box_min_values, box_max_values, N_start, n=1, repeat=10):
         N = N_start
         gamma = 0
         x_sol, u_sol = None, None
