@@ -1,51 +1,33 @@
-# Learning the Viability Kernel of Robotic Manipulators
+# VBOC — Viability-Based Optimal Control
 
-This GitHub repository contains data-driven algorithms for the computation of viability kernels of robotic manipulators. 
-The algorithms use Optimal Control Problems (OCPs) to generate training data and employ Neural Networks (NNs) to approximate the viability kernel based on this data.
+Data generation and neural network training pipeline to approximate the **viability kernel** of the **aSTedH** platform via VBOC (Viability-Based Optimal Control).
 
-## Algorithms
+## Usage
 
-### Viability-Boundary Optimal Control (VBOC)
-
-The Viability-Boundary Optimal Control algorithm, referred to as "VBOC," utilizes OCPs to directly compute states that lie exactly on the boundary of the viability set and uses an NN regressor to approximate the set.
-
-### Hamilton-Jacoby Reachability (HJR)
-
-The Hamilton-Jacoby Reachability algorithm, referred to as "HJB," is an adaptation of a reachability algorithm presented in the paper "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution" by V. Rubies-Royo and C. Tomlin. 
-HJR computes the solution of the Hamilton-Jacoby-Isaacs (HJI) Partial Differential Equation (PDE) through recursive regression. NN classifiers are employed to approximate the set.
-
-### Active Learning (AL)
-
-The Active Learning algorithm, referred to as "AL" solves OCPs for system's initial states to verify from which of these states it is possible to stop (reach the zero-velocity set). 
-AL leverages then Active Learning techniques to iteratively select batches of new states to be tested to maximize the resulting NN classifier accuracy.
-
-## Installation
-- Clone the repository\
-`git clone https://github.com/idra-lab/VBOC.git`
-- Install the requirements\
-`pip install -r requirements.txt`
-- Follow the instructions to install [CasADi](https://web.casadi.org/get/), [Acados](https://docs.acados.org/installation/index.html) and [Pytorch](https://pytorch.org/get-started/locally/).
-
-# Usage
-Run the script `main.py` inside the `scripts` folder. One can consult the help for the available options:
-```
-cd scripts
-python3 main.py --help
-```
-For example:
-- find the states on the boundary of the viability kernel through VBOC
-```
-python3 main.py -v
-```
-- use NN regression to learn an approximation of the N-control invariant set
-```
-python3 main.py -t
+```bash
+python main.py --system sth [--generation] [--training] [--plot] [--check] [--epochs N] [--horizon N]
 ```
 
-## References
+| Flag | Description |
+|---|---|
+| `--generation` | Run VBOC data generation (parallelised) |
+| `--training` | Train the neural network on generated data |
+| `--plot` | Save diagnostic plots |
+| `--check` | Single deterministic solve for debugging |
+| `--horizon N` | Override the default prediction horizon |
 
-- A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control", IEEE Robotics and Automation Letters, 2023 
-- V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution", in 5th International Conference on Learning Representations, 2017
-- A. Chakrabarty, C. Danielson, S. D. Cairano, and A. Raghunathan, "Active Learning for Estimating Reachable Sets for Systems With Unknown Dynamics", IEEE Transactions on Cybernetics, 2020
+All parameters are in the `Parameters` class (`vboc/parser.py`).
 
+## Pipeline
 
+1. **Data generation** — solves VBOC OCPs from randomised orientations and obstacle boxes; results saved to `data/`.
+2. **Training** — fits a feedforward network mapping `[box, orientation, velocity direction] → max safe speed`; checkpoint saved to `nn/`.
+3. **Plotting** — fixed-direction viability kernel sections and training diagnostics.
+
+## Requirements
+
+`acados`, `casadi`, `torch`, `numpy`, `scipy`, `adam-robotics`, `urdf_parser_py`, `rich`, `tqdm`, `matplotlib`
+
+---
+
+Copyright © 2025. All rights reserved.
